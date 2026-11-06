@@ -408,8 +408,7 @@ start experiment-output\index.html</pre>
   }
 
   /* ---------- One section per round ---------- */
-  const roundsHost = document.getElementById("rounds");
-  DATA.runs.forEach((run) => roundsHost.append(roundSection(run)));
+  const boxId = (run, f) => "box-" + run.name + "-" + f.name.toLowerCase();
 
   function roundSection(run) {
     const sec = el("section", { class: "round", id: "round-" + run.name, "aria-label": run.label });
@@ -493,7 +492,7 @@ start experiment-output\index.html</pre>
       link.addEventListener("click", () => { const d = sec.querySelector("details.boxes"); if (d) d.open = true; });
       const strong = el("strong");
       strong.append(link);
-      name.append(strong, el("div", { class: "muted small" }, f.kind));
+      name.append(strong, el("div", { class: "muted small" }, run.year === 2025 ? f.kind : "picked as " + f.kind + " in 2025"));
       const j = f.swirJump;
       tr.append(name, el("td", {}, f.reading),
         el("td", { class: "num" }, f.from ? shortDate(f.from) + " – " + shortDate(f.to) : "–"),
@@ -513,8 +512,6 @@ start experiment-output\index.html</pre>
     sec.append(boxesDetails(run));
     return sec;
   }
-
-  const boxId = (run, f) => "box-" + run.name + "-" + f.name.toLowerCase();
 
   /* Every box's charts and photos, built when first opened */
   function boxesDetails(run) {
@@ -695,6 +692,10 @@ start experiment-output\index.html</pre>
     });
     host.append(svg, legend);
   }
+
+  /* ---------- Build the rounds, now that every helper above exists ---------- */
+  const roundsHost = document.getElementById("rounds");
+  DATA.runs.forEach((run) => roundsHost.append(roundSection(run)));
 
   /* ---------- News sources ---------- */
   const sources = document.getElementById("sources");
