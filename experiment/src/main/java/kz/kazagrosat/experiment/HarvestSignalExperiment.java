@@ -19,7 +19,11 @@ import kz.kazagrosat.pipeline.stac.StacItem;
 
 /**
  * Throwaway experiment: does any satellite signal show the harvest cut on real Kostanay fields?
- * It downloads the 2025 season for a few hand-picked fields and writes the numbers and photos.
+ * It runs every round in experiment/runs.csv, downloading each one's season once, and writes the
+ * numbers, photos and one results page.
+ *
+ * <p>Options: {@code --report-only} rebuilds the page from saved data; {@code --refresh} downloads
+ * every round again.
  */
 public final class HarvestSignalExperiment {
 
@@ -34,26 +38,40 @@ public final class HarvestSignalExperiment {
     private HarvestSignalExperiment() {}
 
     public static void main(String[] args) throws Exception {
-        Path fieldsFile = Path.of("experiment", "fields.csv");
-        Path readingsFile = Path.of("experiment", "photo-readings.csv");
+        List<String> options = List.of(args);
+        boolean reportOnly = options.contains("--report-only");
+        boolean refresh = options.contains("--refresh");
         Path output = Path.of("experiment-output");
-        boolean reportOnly = args.length > 0 && args[0].equals("--report-only");
-        List<Field> fields = Field.load(fieldsFile);
+        List<Run> runs = Run.load(Path.of("experiment", "runs.csv"));
         Files.createDirectories(output);
 
         PixelGrid areaGrid = areaGrid(output.resolve("area.csv"));
-        if (!reportOnly) {
-            download(fields, output, areaGrid);
+        for (Run run : runs) {
+            Path folder = run.folder(output);
+            Files.createDirectories(folder);
+            boolean saved = Files.exists(folder.resolve("optical.csv")) && Files.exists(folder.resolve("radar.csv"));
+            if (!reportOnly && (refresh || !saved)) {
+                System.err.println(run.label());
+                download(run, folder, areaGrid);
+            }
+            if (!Files.exists(folder.resolve("radar.csv"))) {
+                System.err.println(run.label() + ": no saved data yet, so it is left out of the page.");
+                continue;
+            }
+            Path rain = folder.resolve("rain.csv");
+            if (refresh || !Files.exists(rain)) {
+                Rainfall.download(rain, run.season());
+            }
+            for (Field field : run.fields()) {
+                PhotoStrips.write(field, folder.resolve("photos"), folder.resolve("strips").resolve(field.name() + ".jpg"));
+            }
         }
-        Path rain = output.resolve("rain.csv");
-        if (!reportOnly || !Files.exists(rain)) {
-            Rainfall.download(rain);
+        Report.write(runs, output, areaGrid, Path.of("experiment", "news.csv"), Path.of("experiment", "findings.html"));
+        for (Run run : runs) {
+            if (Files.exists(run.folder(output).resolve("radar.csv"))) {
+                AnalysisTable.print(run, run.folder(output), System.out);
+            }
         }
-        for (Field field : fields) {
-            PhotoStrips.write(field, output.resolve("photos"), output.resolve("strips").resolve(field.name() + ".jpg"));
-        }
-        Report.write(fields, output, readingsFile, areaGrid);
-        AnalysisTable.print(fields, output, readingsFile, System.out);
         System.err.println("Done. Open " + output.resolve("index.html").toAbsolutePath());
     }
 
@@ -64,24 +82,26 @@ public final class HarvestSignalExperiment {
             return new PixelGrid(Integer.parseInt(p[0]), Double.parseDouble(p[1]), Double.parseDouble(p[2]),
                     Double.parseDouble(p[3]), Integer.parseInt(p[4]), Integer.parseInt(p[5]));
         }
-        PixelGrid grid = new OpticalPass(List.of(), file).areaGrid(OpticalPass.scenes().getFirst());
+        Study.Season season = new Study.Season(2025);
+        PixelGrid grid = new OpticalPass(season, List.of(), file).areaGrid(OpticalPass.scenes(season).getFirst());
         Files.writeString(file, String.format(Locale.ROOT, "%d,%.1f,%.1f,%.1f,%d,%d%n", grid.epsg(), grid.originX(),
                 grid.originY(), grid.pixelSize(), grid.width(), grid.height()));
         return grid;
     }
 
-    private static void download(List<Field> fields, Path output, PixelGrid areaGrid)
+    private static void download(Run run, Path output, PixelGrid areaGrid)
             throws IOException, InterruptedException {
+        List<Field> fields = run.fields();
         System.err.println("Looking for Sentinel-2 scenes...");
-        List<StacItem> opticalScenes = OpticalPass.scenes();
+        List<StacItem> opticalScenes = OpticalPass.scenes(run.season());
         System.err.println("Found " + opticalScenes.size() + " dates. This is the slow part, usually 5 to 15 minutes.");
-        OpticalPass optical = new OpticalPass(fields, output.resolve("photos"));
+        OpticalPass optical = new OpticalPass(run.season(), fields, output.resolve("photos"));
         List<OpticalPass.Row> opticalRows = measureAll(opticalScenes, optical::measure, OPTICAL_THREADS);
         opticalRows.sort(Comparator.comparing(OpticalPass.Row::field).thenComparing(OpticalPass.Row::date));
         writeOptical(output.resolve("optical.csv"), opticalRows);
 
         System.err.println("Looking for Sentinel-1 radar scenes...");
-        List<StacItem> radarScenes = RadarPass.scenes();
+        List<StacItem> radarScenes = RadarPass.scenes(run.season());
         System.err.println("Found " + radarScenes.size() + " dates.");
         RadarPass radar = new RadarPass(fields, areaGrid);
         List<RadarPass.Row> radarRows = measureAll(radarScenes, radar::measure, RADAR_THREADS);

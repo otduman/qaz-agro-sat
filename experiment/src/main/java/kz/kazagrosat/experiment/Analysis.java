@@ -51,8 +51,6 @@ final class Analysis {
     /** SWIR rise that counts as a jump, in reflectance percent. Set after seeing the data. */
     static final double SWIR_JUMP = 3.5;
 
-    private static final LocalDate RADAR_FROM = LocalDate.of(2025, 8, 1);
-
     private Analysis() {}
 
     static List<OpticalRow> loadOptical(Path file) throws IOException {
@@ -127,10 +125,45 @@ final class Analysis {
     /** The biggest fall in the VH minus VV gap, in dB. Reported as a positive size. */
     static Optional<Step> radarDrop(List<RadarRow> rows) {
         List<Point> falling = rows.stream()
-                .filter(row -> !row.date().isBefore(RADAR_FROM))
+                .filter(row -> row.date().getMonthValue() >= 8)
                 .map(row -> new Point(row.date(), -row.gap()))
                 .toList();
         return biggestStep(falling, 1);
+    }
+
+    /** Rain this heavy over the three days before a radar image makes it unusable for comparison. */
+    static final double WET_MM = 5;
+
+    /**
+     * The radar gap change across a window, compared only within one orbit and only on dry dates: the
+     * last dry date before the window against the first dry date after it, averaged over the orbits
+     * that have both. NaN when no orbit has both.
+     */
+    static double radarChangeSameOrbit(List<RadarRow> rows, LocalDate from, LocalDate to,
+                                       java.util.Map<LocalDate, Double> rain) {
+        double sum = 0;
+        int orbits = 0;
+        for (int track : rows.stream().mapToInt(RadarRow::track).distinct().toArray()) {
+            List<RadarRow> dry = rows.stream()
+                    .filter(row -> row.track() == track && rainBefore(rain, row.date()) < WET_MM)
+                    .toList();
+            Optional<RadarRow> before = dry.stream().filter(row -> !row.date().isAfter(from))
+                    .reduce((first, second) -> second);
+            Optional<RadarRow> after = dry.stream().filter(row -> !row.date().isBefore(to)).findFirst();
+            if (before.isPresent() && after.isPresent()) {
+                sum += after.get().gap() - before.get().gap();
+                orbits++;
+            }
+        }
+        return orbits == 0 ? Double.NaN : sum / orbits;
+    }
+
+    static double rainBefore(java.util.Map<LocalDate, Double> rain, LocalDate date) {
+        double total = 0;
+        for (int day = 0; day < 3; day++) {
+            total += rain.getOrDefault(date.minusDays(day), 0.0);
+        }
+        return total;
     }
 
     /** How much a signal changed from the dates before a window to the dates after it. */

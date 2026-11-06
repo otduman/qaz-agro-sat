@@ -44,23 +44,23 @@ final class OpticalPass {
     /** How much surrounding land each photo shows beyond the box, in 10 m pixels. */
     private static final int PHOTO_MARGIN = 40;
     private static final double PHOTO_MIN_CLEAR = 0.9;
-    private static final LocalDate PHOTOS_FROM = LocalDate.of(2025, 7, 1);
-    private static final LocalDate PHOTOS_TO = LocalDate.of(2025, 10, 20);
     private static final double PHOTO_WHITE_POINT = 0.32;
 
     private final RetryingHttp http = new RetryingHttp(RetryPolicy.DEFAULT);
+    private final Study.Season season;
     private final List<Field> fields;
     private final Path photoFolder;
 
-    OpticalPass(List<Field> fields, Path photoFolder) {
+    OpticalPass(Study.Season season, List<Field> fields, Path photoFolder) {
+        this.season = season;
         this.fields = fields;
         this.photoFolder = photoFolder;
     }
 
     /** The least cloudy scene of each date that fully covers the study area. */
-    static List<StacItem> scenes() throws IOException, InterruptedException {
+    static List<StacItem> scenes(Study.Season season) throws IOException, InterruptedException {
         List<StacItem> found = new StacClient(StacClient.EARTH_SEARCH, RetryPolicy.DEFAULT)
-                .search(new StacSearch(COLLECTION, Study.AREA, Study.FROM, Study.TO, MAX_TILE_CLOUD));
+                .search(new StacSearch(COLLECTION, Study.AREA, season.from(), season.to(), MAX_TILE_CLOUD));
         Map<LocalDate, StacItem> byDate = new TreeMap<>();
         found.stream()
                 .filter(scene -> scene.id().contains(Study.TILE))
@@ -103,7 +103,7 @@ final class OpticalPass {
             Row row = measureField(field, scene, date, factor, maskWindow.width(), bandWindow.width(), clear, classes,
                     red, green, blue, nir, swir16, swir22);
             rows.add(row);
-            if (row.clear() >= PHOTO_MIN_CLEAR && !date.isBefore(PHOTOS_FROM) && !date.isAfter(PHOTOS_TO)) {
+            if (row.clear() >= PHOTO_MIN_CLEAR && !date.isBefore(season.chartFrom()) && !date.isAfter(season.photosTo())) {
                 savePhoto(field, date, red, green, blue, bandWindow.width(), bandWindow.height());
             }
         }

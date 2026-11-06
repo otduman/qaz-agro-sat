@@ -18,15 +18,14 @@ import kz.kazagrosat.pipeline.http.RetryingHttp;
 /** Daily modelled rainfall for the study area. Wet ground and plants move radar values a lot. */
 final class Rainfall {
 
-    private static final URI ARCHIVE = URI.create("https://archive-api.open-meteo.com/v1/archive"
-            + "?latitude=53.54&longitude=62.55&start_date=" + Study.FROM + "&end_date=" + Study.TO
-            + "&daily=precipitation_sum&timezone=Asia%2FAlmaty");
-
     private Rainfall() {}
 
-    static void download(Path file) throws IOException, InterruptedException {
+    static void download(Path file, Study.Season season) throws IOException, InterruptedException {
+        URI archive = URI.create("https://archive-api.open-meteo.com/v1/archive"
+                + "?latitude=53.54&longitude=62.55&start_date=" + season.from() + "&end_date=" + season.to()
+                + "&daily=precipitation_sum&timezone=Asia%2FAlmaty");
         HttpResponse<byte[]> response = new RetryingHttp(RetryPolicy.DEFAULT).send(
-                HttpRequest.newBuilder(ARCHIVE).timeout(Duration.ofSeconds(40)).GET().build());
+                HttpRequest.newBuilder(archive).timeout(Duration.ofSeconds(40)).GET().build());
         if (response.statusCode() != 200) {
             throw new IOException("Rainfall download failed: HTTP " + response.statusCode());
         }

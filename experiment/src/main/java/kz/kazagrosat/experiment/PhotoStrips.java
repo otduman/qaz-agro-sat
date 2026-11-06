@@ -20,7 +20,6 @@ final class PhotoStrips {
     private static final int GAP = 6;
     private static final int LABEL_HEIGHT = 18;
     private static final int PER_ROW = 6;
-    private static final LocalDate FROM = LocalDate.of(2025, 7, 7);
 
     private PhotoStrips() {}
 
@@ -29,7 +28,7 @@ final class PhotoStrips {
         try (Stream<Path> listing = Files.list(photos)) {
             files = listing
                     .filter(file -> file.getFileName().toString().startsWith(field.name() + "_"))
-                    .filter(file -> !dateOf(file).isBefore(FROM))
+                    .filter(file -> !(dateOf(file).getMonthValue() == 7 && dateOf(file).getDayOfMonth() < 7))
                     .sorted()
                     .toList();
         }

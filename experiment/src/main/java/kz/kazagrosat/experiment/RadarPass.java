@@ -54,9 +54,9 @@ final class RadarPass {
         this.token = fetchToken();
     }
 
-    static List<StacItem> scenes() throws IOException, InterruptedException {
+    static List<StacItem> scenes(Study.Season season) throws IOException, InterruptedException {
         List<StacItem> items = new ArrayList<>(new StacClient(CATALOGUE, RetryPolicy.DEFAULT)
-                .search(new StacSearch(COLLECTION, Study.AREA, Study.FROM, Study.TO, null)));
+                .search(new StacSearch(COLLECTION, Study.AREA, season.from(), season.to(), null)));
         items.sort(Comparator.comparing(StacItem::datetime));
         return items;
     }
