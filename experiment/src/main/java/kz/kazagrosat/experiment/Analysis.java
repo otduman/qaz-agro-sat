@@ -122,6 +122,58 @@ final class Analysis {
         return biggestStep(ripeRows(clear).stream().map(row -> new Point(row.date(), row.swir16() * 100)).toList(), 1);
     }
 
+    /*
+     * Rule v2. Fixed on 2026-11-06 from why rule v1 failed in rounds 1 to 3, and committed before any
+     * 2023 data was downloaded, so round 4 is a fair test of it. The threshold is unchanged.
+     */
+
+    /** Later dates bring snow and wet ground, which faked or hid jumps in 2024. */
+    private static final int LAST_MONTH = 10;
+    private static final int LAST_DAY = 20;
+
+    /** A one-date rise and fall this large, contradicted by both neighbours, is haze rather than a cut. */
+    static final double SPIKE = 3.0;
+
+    /** Rule v2: the same jump, after dropping late dates and one-date spikes, keeping the last standing date. */
+    static Optional<Step> swirJumpV2(List<OpticalRow> clear) {
+        List<OpticalRow> inSeason = clear.stream()
+                .filter(row -> row.date().getMonthValue() < LAST_MONTH
+                        || row.date().getMonthValue() == LAST_MONTH && row.date().getDayOfMonth() <= LAST_DAY)
+                .toList();
+        List<Point> series = ripeRowsWithLastStanding(inSeason).stream()
+                .map(row -> new Point(row.date(), row.swir16() * 100))
+                .toList();
+        return biggestStep(withoutSpikes(series), 1);
+    }
+
+    /** Like ripeRows, but also keeps the clear date just before ripeness if it is in August or later. */
+    static List<OpticalRow> ripeRowsWithLastStanding(List<OpticalRow> clear) {
+        for (int i = 0; i < clear.size(); i++) {
+            OpticalRow row = clear.get(i);
+            if (row.date().getMonthValue() >= 8 && row.ndvi() < RIPE_NDVI) {
+                boolean keepPrevious = i > 0 && clear.get(i - 1).date().getMonthValue() >= 8;
+                return clear.subList(keepPrevious ? i - 1 : i, clear.size());
+            }
+        }
+        return List.of();
+    }
+
+    static List<Point> withoutSpikes(List<Point> series) {
+        List<Point> kept = new ArrayList<>();
+        for (int i = 0; i < series.size(); i++) {
+            if (i > 0 && i < series.size() - 1) {
+                double fromPrevious = series.get(i).value() - series.get(i - 1).value();
+                double toNext = series.get(i).value() - series.get(i + 1).value();
+                if (Math.abs(fromPrevious) > SPIKE && Math.abs(toNext) > SPIKE
+                        && Math.signum(fromPrevious) == Math.signum(toNext)) {
+                    continue;
+                }
+            }
+            kept.add(series.get(i));
+        }
+        return kept;
+    }
+
     /** The biggest fall in the VH minus VV gap, in dB. Reported as a positive size. */
     static Optional<Step> radarDrop(List<RadarRow> rows) {
         List<Point> falling = rows.stream()
