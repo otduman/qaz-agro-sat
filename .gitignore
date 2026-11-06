@@ -5,6 +5,9 @@ target/
 output/
 experiment-output/
 
+# Downloaded season stacks, reproducible with the season command
+data/
+
 # Editor and IDE files
 .idea/
 .vscode/
