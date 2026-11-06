@@ -5,6 +5,7 @@ import java.net.URI;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Consumer;
 import kz.kazagrosat.core.geo.BoundingBox;
 import kz.kazagrosat.core.geo.UtmProjection;
 import kz.kazagrosat.core.index.Ndvi;
@@ -29,14 +30,18 @@ public final class NdviPipeline {
 
     private final StacClient stac;
     private final RetryingHttp http;
+    private final Consumer<String> progress;
 
-    public NdviPipeline(URI stacUri, RetryPolicy retry) {
+    /** Calls {@code progress} with a short message as each slow step starts. */
+    public NdviPipeline(URI stacUri, RetryPolicy retry, Consumer<String> progress) {
         this.stac = new StacClient(stacUri, retry);
         this.http = new RetryingHttp(retry);
+        this.progress = progress;
     }
 
     /** Returns nothing when no scene from that day covers the whole area. */
     public Optional<NdviResult> run(BoundingBox area, LocalDate date) throws IOException, InterruptedException {
+        progress.accept("Searching for imagery on " + date + "...");
         List<StacItem> scenes = stac.search(new StacSearch(COLLECTION, area, date, date, null));
         Optional<StacItem> scene = SceneSelector.bestCovering(scenes, area);
         return scene.isPresent() ? Optional.of(compute(scene.get(), area)) : Optional.empty();
@@ -45,6 +50,7 @@ public final class NdviPipeline {
     private NdviResult compute(StacItem scene, BoundingBox area) throws IOException, InterruptedException {
         StacAsset redAsset = scene.asset("red");
         StacAsset nirAsset = scene.asset("nir");
+        progress.accept("Opening " + scene.id() + "...");
         CogReader red = open(redAsset);
         CogReader nir = open(nirAsset);
         CogReader scl = open(scene.asset("scl"));
@@ -55,8 +61,11 @@ public final class NdviPipeline {
         PixelWindow maskWindow = scl.grid().windowCovering(projection.project(area));
         PixelWindow bandWindow = maskWindow.scaled(factor);
 
+        progress.accept("Reading the red band...");
         float[] redValues = reflectance(red, redAsset, bandWindow);
+        progress.accept("Reading the near-infrared band...");
         float[] nirValues = reflectance(nir, nirAsset, bandWindow);
+        progress.accept("Reading the cloud mask...");
         int[] classes = SclMask.upsample(
                 scl.readWindow(maskWindow), maskWindow.width(), maskWindow.height(), factor);
 

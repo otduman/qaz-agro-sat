@@ -8,6 +8,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.io.IOException;
 import java.time.Duration;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
 import kz.kazagrosat.core.geo.BoundingBox;
 import kz.kazagrosat.core.raster.PixelGrid;
 import kz.kazagrosat.pipeline.http.RetryPolicy;
@@ -22,8 +24,31 @@ class NdviPipelineTest {
     private static final BoundingBox AREA = BoundingBox.parse(FakeEarthSearch.AREA);
     private static final LocalDate DATE = LocalDate.of(2025, 7, 12);
 
+    private static final RetryPolicy RETRY = new RetryPolicy(2, Duration.ofMillis(1));
+
     private static NdviPipeline pipeline(FakeEarthSearch fake) {
-        return new NdviPipeline(fake.stacUri(), new RetryPolicy(2, Duration.ofMillis(1)));
+        return new NdviPipeline(fake.stacUri(), RETRY, message -> {});
+    }
+
+    @Test
+    void announcesEachStepBeforeItsNetworkWorkStarts() throws Exception {
+        try (FakeEarthSearch fake = new FakeEarthSearch()) {
+            List<Integer> requestsAtEachMessage = new ArrayList<>();
+            NdviPipeline pipeline = new NdviPipeline(fake.stacUri(), RETRY,
+                    message -> requestsAtEachMessage.add(fake.server().requests().size()));
+
+            pipeline.run(AREA, DATE).orElseThrow();
+
+            assertTrue(requestsAtEachMessage.size() >= 4,
+                    "the search and all three band reads are announced: " + requestsAtEachMessage);
+            assertEquals(0, requestsAtEachMessage.get(0), "the first message comes before any request");
+            for (int i = 1; i < requestsAtEachMessage.size(); i++) {
+                assertTrue(requestsAtEachMessage.get(i) > requestsAtEachMessage.get(i - 1),
+                        "messages are spread through the work, not batched: " + requestsAtEachMessage);
+            }
+            assertTrue(requestsAtEachMessage.getLast() < fake.server().requests().size(),
+                    "the last step's reads come after its message: " + requestsAtEachMessage);
+        }
     }
 
     @Test

@@ -91,6 +91,14 @@ class MainTest {
     }
 
     @Test
+    void ndviShowsProgressOnStderrSoStdoutHoldsOnlyTheResults() {
+        runNdvi(FakeEarthSearch.AREA, folder);
+
+        assertFalse(stderr().isBlank(), "something appears while it works");
+        assertTrue(stdout().startsWith("Scene:"), stdout());
+    }
+
+    @Test
     void numbersUseADotWhateverTheMachineLocale() {
         Locale original = Locale.getDefault();
         Locale.setDefault(Locale.forLanguageTag("ru-KZ"));

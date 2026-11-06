@@ -145,7 +145,7 @@ public final class Main {
     private static int ndvi(
             BoundingBox bbox, LocalDate date, Path folder, URI stacUri, PrintStream out, PrintStream err)
             throws IOException, InterruptedException {
-        Optional<NdviResult> found = new NdviPipeline(stacUri, RetryPolicy.DEFAULT).run(bbox, date);
+        Optional<NdviResult> found = new NdviPipeline(stacUri, RetryPolicy.DEFAULT, err::println).run(bbox, date);
         if (found.isEmpty()) {
             err.println("No single scene on " + date + " covers the whole area."
                     + " Use the scenes command to see which dates do.");
