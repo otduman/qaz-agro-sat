@@ -14,9 +14,9 @@ import kz.kazagrosat.core.raster.PixelGrid;
 import kz.kazagrosat.core.raster.PixelWindow;
 
 /**
- * Reads pixel windows from the full-resolution image of a single-band, tiled, unsigned-integer
- * GeoTIFF, fetching only the tiles a window touches. Anything else is rejected with a clear error
- * rather than read wrongly.
+ * Reads pixel windows from the full-resolution image of a single-band, tiled GeoTIFF holding
+ * unsigned integers or 32-bit floats, fetching only the tiles a window touches. Anything else is
+ * rejected with a clear error rather than read wrongly.
  */
 public final class CogReader {
 
@@ -53,11 +53,15 @@ public final class CogReader {
     private static final int COMPRESSION_DEFLATE_OLD = 32946;
     private static final int PREDICTOR_NONE = 1;
     private static final int PREDICTOR_HORIZONTAL = 2;
+    private static final int PREDICTOR_FLOATING_POINT = 3;
+    private static final int SAMPLE_UNSIGNED = 1;
+    private static final int SAMPLE_FLOAT = 3;
     private static final int GEO_KEY_PROJECTED_CRS = 3072;
 
     private final ByteSource source;
     private final ByteOrder order;
     private final PixelGrid grid;
+    private final boolean floating;
     private final int bits;
     private final int compression;
     private final int predictor;
@@ -66,6 +70,8 @@ public final class CogReader {
     private final int tilesAcross;
     private final long[] tileOffsets;
     private final long[] tileByteCounts;
+
+    /** The nodata value as stored: a whole number, or the raw bits of a float. */
     private final int nodata;
 
     private CogReader(ByteSource source, ByteOrder order, Directory directory) throws IOException {
@@ -76,11 +82,13 @@ public final class CogReader {
         if (samples != 1) {
             throw new IOException("Expected one band but the file has " + samples + " samples per pixel");
         }
-        if (directory.number(TAG_SAMPLE_FORMAT, 1) != 1) {
-            throw new IOException("Only unsigned integer pixels are supported");
+        long sampleFormat = directory.number(TAG_SAMPLE_FORMAT, SAMPLE_UNSIGNED);
+        if (sampleFormat != SAMPLE_UNSIGNED && sampleFormat != SAMPLE_FLOAT) {
+            throw new IOException("Unsupported sample format " + sampleFormat);
         }
+        this.floating = sampleFormat == SAMPLE_FLOAT;
         this.bits = (int) directory.number(TAG_BITS, 1);
-        if (bits != 8 && bits != 16) {
+        if (floating ? bits != 32 : bits != 8 && bits != 16) {
             throw new IOException("Unsupported bit depth " + bits);
         }
         this.compression = (int) directory.number(TAG_COMPRESSION, COMPRESSION_NONE);
@@ -89,7 +97,8 @@ public final class CogReader {
             throw new IOException("Unsupported compression " + compression);
         }
         this.predictor = (int) directory.number(TAG_PREDICTOR, PREDICTOR_NONE);
-        if (predictor != PREDICTOR_NONE && predictor != PREDICTOR_HORIZONTAL) {
+        int matchingPredictor = floating ? PREDICTOR_FLOATING_POINT : PREDICTOR_HORIZONTAL;
+        if (predictor != PREDICTOR_NONE && predictor != matchingPredictor) {
             throw new IOException("Unsupported predictor " + predictor);
         }
         if (!directory.has(TAG_TILE_WIDTH) || !directory.has(TAG_TILE_OFFSETS)) {
@@ -103,7 +112,19 @@ public final class CogReader {
         int height = (int) directory.number(TAG_HEIGHT, 0);
         this.tilesAcross = (width + tileWidth - 1) / tileWidth;
         this.grid = readGrid(directory, width, height);
-        this.nodata = directory.has(TAG_GDAL_NODATA) ? Integer.parseInt(directory.text(TAG_GDAL_NODATA)) : 0;
+        this.nodata = readNodata(directory, floating);
+    }
+
+    private static int readNodata(Directory directory, boolean floating) throws IOException {
+        if (!directory.has(TAG_GDAL_NODATA)) {
+            return floating ? Float.floatToRawIntBits(Float.NaN) : 0;
+        }
+        String text = directory.text(TAG_GDAL_NODATA);
+        if (!floating) {
+            return Integer.parseInt(text);
+        }
+        // GDAL writes "nan" in lower case, which Java's parser does not accept.
+        return Float.floatToRawIntBits(text.equalsIgnoreCase("nan") ? Float.NaN : Float.parseFloat(text));
     }
 
     public static CogReader open(ByteSource source) throws IOException, InterruptedException {
@@ -158,6 +179,27 @@ public final class CogReader {
 
     /** Returns the window's unsigned pixel values, row by row. */
     public int[] readWindow(PixelWindow window) throws IOException, InterruptedException {
+        if (floating) {
+            throw new IllegalStateException("This file holds floats: use readFloatWindow");
+        }
+        return stitch(window);
+    }
+
+    /** Returns the window's float pixel values, row by row, with NaN for no data. */
+    public float[] readFloatWindow(PixelWindow window) throws IOException, InterruptedException {
+        if (!floating) {
+            throw new IllegalStateException("This file holds whole numbers: use readWindow");
+        }
+        int[] stored = stitch(window);
+        float[] pixels = new float[stored.length];
+        for (int i = 0; i < pixels.length; i++) {
+            pixels[i] = stored[i] == nodata ? Float.NaN : Float.intBitsToFloat(stored[i]);
+        }
+        return pixels;
+    }
+
+    /** Assembles a window from its tiles. Float pixels pass through as their raw bits. */
+    private int[] stitch(PixelWindow window) throws IOException, InterruptedException {
         int right = window.col() + window.width();
         int bottom = window.row() + window.height();
         if (window.col() < 0 || window.row() < 0 || right > grid.width() || bottom > grid.height()) {
@@ -197,7 +239,7 @@ public final class CogReader {
         }
         int rawSize = tileWidth * tileHeight * (bits / 8);
         byte[] raw = compression == COMPRESSION_NONE ? stored : inflate(stored, rawSize, index);
-        return decodeSamples(raw);
+        return floating ? decodeFloatBits(raw) : decodeSamples(raw);
     }
 
     private static byte[] inflate(byte[] stored, int rawSize, int index) throws IOException {
@@ -237,6 +279,30 @@ public final class CogReader {
                 for (int x = 1; x < tileWidth; x++) {
                     samples[row + x] = (samples[row + x] + samples[row + x - 1]) & mask;
                 }
+            }
+        }
+        return samples;
+    }
+
+    private int[] decodeFloatBits(byte[] raw) {
+        int[] samples = new int[tileWidth * tileHeight];
+        if (predictor != PREDICTOR_FLOATING_POINT) {
+            ByteBuffer.wrap(raw).order(order).asIntBuffer().get(samples);
+            return samples;
+        }
+        // Each row holds the first byte of every pixel, then the second, and so on, most significant
+        // first and whatever the file's byte order, with every byte stored as a running difference.
+        int rowBytes = tileWidth * Float.BYTES;
+        for (int y = 0; y < tileHeight; y++) {
+            int row = y * rowBytes;
+            for (int i = 1; i < rowBytes; i++) {
+                raw[row + i] += raw[row + i - 1];
+            }
+            for (int x = 0; x < tileWidth; x++) {
+                samples[y * tileWidth + x] = Byte.toUnsignedInt(raw[row + x]) << 24
+                        | Byte.toUnsignedInt(raw[row + tileWidth + x]) << 16
+                        | Byte.toUnsignedInt(raw[row + 2 * tileWidth + x]) << 8
+                        | Byte.toUnsignedInt(raw[row + 3 * tileWidth + x]);
             }
         }
         return samples;

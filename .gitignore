@@ -3,6 +3,7 @@ target/
 
 # Generated maps, reproducible with the CLI
 output/
+experiment-output/
 
 # Editor and IDE files
 .idea/

@@ -1,0 +1,5 @@
+name,year,fields,readings,label
+hand-picked,2025,experiment/fields.csv,experiment/photo-readings.csv,"Round 1: 12 boxes I picked by hand, 2025"
+blind,2025,experiment/fields-blind.csv,experiment/photo-readings-blind.csv,"Round 2: 23 new boxes picked by a fixed rule, 2025"
+season-2024,2024,experiment/fields.csv;experiment/fields-blind.csv,experiment/photo-readings-2024.csv,"Round 3: the same 35 boxes in the 2024 season"
+season-2023,2023,experiment/fields.csv;experiment/fields-blind.csv,experiment/photo-readings-2023.csv,"Round 4: the same 35 boxes in the 2023 season, scoring rule v2"
