@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Can satellites see the harvest cut?</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<style>
+/* Layout idea: a field notebook. Answer first, then evidence, then one card per box with charts above its photos. */
+:root {
+  color-scheme: light;
+  --bg: #f2f4f1;
+  --surface: #ffffff;
+  --ink: #15191a;
+  --ink-2: #4b5355;
+  --ink-3: #737c7f;
+  --rule: #dbe0db;
+  --accent: #1d6a57;
+  --band: rgba(29, 106, 87, 0.12);
+  --swir: #eb6834;
+  --ndvi: #008300;
+  --orbit-a: #2a78d6;
+  --orbit-b: #1baf7a;
+  --rain: #7d8b99;
+  --good: #1f7a3f;
+  --good-bg: #e3f2e6;
+  --warn: #8a5a00;
+  --warn-bg: #fbefd2;
+  --bad: #a3262a;
+  --bad-bg: #f8e1e1;
+  --neutral-bg: #e9ecea;
+  --display: "IBM Plex Sans Condensed", "Arial Narrow", "Segoe UI", sans-serif;
+  --body: "IBM Plex Sans", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #131716;
+    --surface: #1b201e;
+    --ink: #eef1ed;
+    --ink-2: #b8c0bc;
+    --ink-3: #8d9692;
+    --rule: #2d3431;
+    --accent: #5fc4a6;
+    --band: rgba(95, 196, 166, 0.14);
+    --swir: #d95926;
+    --ndvi: #2f9e3a;
+    --orbit-a: #3987e5;
+    --orbit-b: #199e70;
+    --rain: #8796a6;
+    --good: #7fd69a;
+    --good-bg: #1f3526;
+    --warn: #f0c060;
+    --warn-bg: #3a3020;
+    --bad: #f09a9a;
+    --bad-bg: #3d2224;
+    --neutral-bg: #262c2a;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #131716;
+  --surface: #1b201e;
+  --ink: #eef1ed;
+  --ink-2: #b8c0bc;
+  --ink-3: #8d9692;
+  --rule: #2d3431;
+  --accent: #5fc4a6;
+  --band: rgba(95, 196, 166, 0.14);
+  --swir: #d95926;
+  --ndvi: #2f9e3a;
+  --orbit-a: #3987e5;
+  --orbit-b: #199e70;
+  --rain: #8796a6;
+  --good: #7fd69a;
+  --good-bg: #1f3526;
+  --warn: #f0c060;
+  --warn-bg: #3a3020;
+  --bad: #f09a9a;
+  --bad-bg: #3d2224;
+  --neutral-bg: #262c2a;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font: 400 16px/1.55 var(--body);
+}
+main { max-width: 1120px; margin: 0 auto; padding: 32px 20px 64px; display: grid; gap: 40px; }
+h1, h2, h3 { font-family: var(--display); font-weight: 600; line-height: 1.15; text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(30px, 5vw, 44px); letter-spacing: -0.01em; }
+h2 { font-size: 26px; }
+h3 { font-size: 20px; }
+p { margin: 0; max-width: 68ch; }
+a { color: var(--accent); }
+a:focus-visible, button:focus-visible, summary:focus-visible, svg:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.num { font-variant-numeric: tabular-nums; }
+.muted { color: var(--ink-2); }
+.small { font-size: 14px; }
+section { display: grid; gap: 16px; }
+header.top { display: grid; gap: 12px; }
+.meta { color: var(--ink-2); font-size: 15px; }
+.answer { background: var(--surface); border-left: 4px solid var(--accent); padding: 20px 22px; display: grid; gap: 12px; }
+.answer p { font-size: 18px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+.tile { background: var(--surface); padding: 14px 16px; display: grid; gap: 4px; }
+.tile .big { font: 600 30px/1.1 var(--display); font-variant-numeric: tabular-nums; }
+.tile .label { font-size: 14px; color: var(--ink-2); }
+.scroll { overflow-x: auto; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 15px; }
+th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+th { font-weight: 600; color: var(--ink-2); font-size: 13px; text-transform: uppercase; letter-spacing: 0.04em; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+tr:last-child td { border-bottom: 0; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px; border-radius: 999px; font-size: 13px; font-weight: 600; white-space: nowrap; }
+.chip.good { background: var(--good-bg); color: var(--good); }
+.chip.warn { background: var(--warn-bg); color: var(--warn); }
+.chip.bad { background: var(--bad-bg); color: var(--bad); }
+.chip.neutral { background: var(--neutral-bg); color: var(--ink-2); }
+figure { margin: 0; display: grid; gap: 8px; }
+figcaption { font-size: 14px; color: var(--ink-2); max-width: 80ch; }
+.map img { width: 100%; max-width: 720px; height: auto; display: block; }
+.chart { background: var(--surface); padding: 10px 12px 6px; display: grid; gap: 4px; }
+.chart-title { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; font-size: 13px; color: var(--ink-2); }
+.chart-title strong { color: var(--ink); font-weight: 600; }
+.key { display: inline-flex; align-items: center; gap: 5px; }
+.key i { display: inline-block; width: 14px; height: 2px; border-radius: 1px; }
+.key i.swatch { height: 10px; width: 14px; border-radius: 2px; }
+svg.plot { width: 100%; height: auto; display: block; touch-action: pan-y; }
+svg.plot text { fill: var(--ink-3); font: 10px var(--body); font-variant-numeric: tabular-nums; }
+svg.plot .grid { stroke: var(--rule); stroke-width: 1; }
+svg.plot .band { fill: var(--band); }
+svg.plot .jump { stroke: var(--ink); stroke-width: 1.5; }
+svg.plot .cross { stroke: var(--ink-3); stroke-width: 1; }
+svg.plot .lbl { fill: var(--ink-2); font-weight: 600; }
+.legend-row { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 14px; color: var(--ink-2); }
+.cards { display: grid; gap: 28px; }
+.card { display: grid; gap: 12px; padding-top: 20px; border-top: 1px solid var(--rule); }
+.card-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
+.card-head .where { color: var(--ink-3); font-size: 14px; }
+.charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 10px; }
+.strip img { width: 100%; height: auto; display: block; background: var(--surface); }
+details { background: var(--surface); padding: 8px 12px; }
+summary { cursor: pointer; color: var(--accent); font-weight: 600; font-size: 14px; }
+details table { margin-top: 8px; font-size: 13px; }
+details td, details th { padding: 4px 8px; }
+.tables-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+ol, ul { margin: 0; padding-left: 22px; display: grid; gap: 8px; max-width: 72ch; }
+pre { margin: 0; background: var(--surface); padding: 14px 16px; overflow-x: auto; font: 14px/1.6 ui-monospace, "Cascadia Mono", Consolas, monospace; }
+code { font: 0.92em ui-monospace, "Cascadia Mono", Consolas, monospace; }
+.copy-row { display: grid; gap: 6px; }
+button.copy { justify-self: start; font: 600 14px var(--body); color: var(--accent); background: transparent; border: 1px solid var(--accent); padding: 5px 12px; cursor: pointer; }
+#tip { position: fixed; z-index: 10; pointer-events: none; background: var(--surface); color: var(--ink); border: 1px solid var(--rule); box-shadow: 0 4px 14px rgba(0,0,0,0.12); padding: 7px 10px; font-size: 13px; line-height: 1.4; display: none; min-width: 120px; }
+#tip .d { color: var(--ink-2); margin-bottom: 2px; }
+#tip .row { display: flex; align-items: center; gap: 6px; }
+#tip .row b { font-variant-numeric: tabular-nums; }
+#tip .row i { display: inline-block; width: 12px; height: 2px; }
+@media (max-width: 480px) {
+  main { padding: 20px 16px 48px; gap: 32px; }
+  .answer p { font-size: 17px; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<main>
+  <header class="top">
+    <h1>Can satellites see the harvest cut?</h1>
+    <p class="meta">KazAgroSat Phase 2 experiment · 20 × 20 km test area in Kostanay oblast · 2025 season · 12 boxes picked by hand</p>
+  </header>
+
+  <section aria-labelledby="answer-h">
+    <h2 id="answer-h">The answer so far</h2>
+    <div class="answer" id="answer"></div>
+    <div class="tiles" id="tiles"></div>
+  </section>
+
+  <section aria-labelledby="signals-h">
+    <h2 id="signals-h">Which signal moves when the field is cut</h2>
+    <p class="muted">For each field where the photos show a cut, I compared the last ripe dates before the cut window with the first dates after it. The figure is the median over those fields.</p>
+    <div class="scroll"><table id="signals"></table></div>
+  </section>
+
+  <section aria-labelledby="timeline-h">
+    <h2 id="timeline-h">Do the dates fit the regional harvest?</h2>
+    <p class="muted">The bars show when the photos say each field was cut. The vertical lines show how much of Kostanay oblast's grain area the news reported as cut on that date. Our fields should fall in the same weeks, and they do.</p>
+    <div class="chart" id="timeline"></div>
+  </section>
+
+  <section aria-labelledby="table-h">
+    <h2 id="table-h">Every box</h2>
+    <div class="scroll"><table id="results"></table></div>
+    <figure class="map" id="map-figure">
+      <img src="map.jpg" alt="The July 2025 crop greenness map of the test area with the 12 boxes drawn on it" onerror="this.closest('figure').remove()">
+      <figcaption>Where the boxes are, drawn on the 12 July greenness map. Red boxes are crop fields and blue boxes are controls that nobody should harvest.</figcaption>
+    </figure>
+  </section>
+
+  <section aria-labelledby="fields-h">
+    <h2 id="fields-h">Field by field</h2>
+    <p class="muted">The charts cover 1 July to 25 October and use the same scales, so the boxes compare directly. The shaded band is when the photos show the cut. The black line is where the rule found the brightness jump. Hover or tap a chart for the values. Only dates at least 85% clear of cloud are plotted.</p>
+    <div class="legend-row">
+      <span class="key"><i class="swatch" style="background: var(--band)"></i>cut seen in photos</span>
+      <span class="key"><i style="background: var(--ink); width: 2px; height: 12px"></i>rule's jump</span>
+      <span class="key"><i style="background: var(--orbit-a)"></i>radar orbit 162</span>
+      <span class="key"><i style="background: var(--orbit-b)"></i>radar orbit 89</span>
+    </div>
+    <div class="chart" id="rain"></div>
+    <div class="cards" id="cards"></div>
+  </section>
+
+  <section aria-labelledby="limits-h">
+    <h2 id="limits-h">What this does not prove yet</h2>
+    <ul>
+      <li><strong>The photo dates are my reading, not ground truth.</strong> I judged each cut by eye from the satellite photos. Nobody on the ground has confirmed a single date.</li>
+      <li><strong>The rule was tuned on these same fields.</strong> I set the jump size (<span id="threshold"></span> points) after looking at this data, so it needs testing on fields it has never seen.</li>
+      <li><strong>Six usable fields is a small sample.</strong> Three of my twelve boxes were badly placed: two straddle two fields and one control is half a field. That's a good argument for drawing field boundaries automatically.</li>
+      <li><strong>Cloud sets the precision.</strong> The photo windows are 8 to 15 days wide, and field F01 was cut during a two-month run with no clear photo. Optical satellites alone can only date the cut to within a week or two.</li>
+      <li><strong>The radar test was basic.</strong> It mixed the two orbits, which look from different angles, and didn't correct for rain. Radar isn't ruled out, but it showed nothing useful in this form.</li>
+    </ul>
+  </section>
+
+  <section aria-labelledby="run-h">
+    <h2 id="run-h">Run it yourself</h2>
+    <p>Everything here comes from one Java program on the <code>harvest-signal-experiment</code> branch. Run it in PowerShell from the project folder. The download takes about 7 to 10 minutes and prints a line as each date finishes.</p>
+    <div class="copy-row">
+      <pre id="cmd-full">cd "C:\Programming Projects\qaz-agro-sat"
+git fetch
+git switch harvest-signal-experiment
+.\mvnw.cmd package
+java -jar experiment\target\harvest-signal.jar
+start experiment-output\index.html</pre>
+      <button class="copy" type="button" data-copy="cmd-full">Copy commands</button>
+    </div>
+    <p>It writes everything to <code>experiment-output</code>: this page, the numbers as <code>optical.csv</code> and <code>radar.csv</code>, the photos, and the same results table printed in the terminal.</p>
+    <p>If you disagree with how I read a photo, edit <code>experiment\photo-readings.csv</code> and rebuild the page from the saved data in a few seconds:</p>
+    <div class="copy-row">
+      <pre id="cmd-report">java -jar experiment\target\harvest-signal.jar --report-only</pre>
+      <button class="copy" type="button" data-copy="cmd-report">Copy command</button>
+    </div>
+    <p class="muted small">The boxes are in <code>experiment\fields.csv</code>, as pixels on the July map. If you move a box, run the full download again.</p>
+  </section>
+
+  <section aria-labelledby="sources-h">
+    <h2 id="sources-h">Data sources</h2>
+    <ul class="small">
+      <li>Optical images: Copernicus Sentinel-2 L2A, 2025, from <a href="https://github.com/Element84/earth-search">Earth Search</a> (collection <code>sentinel-2-c1-l2a</code>, tile T41UMV).</li>
+      <li>Radar: Copernicus Sentinel-1, terrain-corrected by Catalyst, from <a href="https://planetarycomputer.microsoft.com/dataset/sentinel-1-rtc">Microsoft Planetary Computer</a> (CC BY 4.0).</li>
+      <li>Rainfall: modelled daily totals from <a href="https://open-meteo.com/">Open-Meteo</a> (CC BY 4.0), for one point in the middle of the area.</li>
+      <li>Regional harvest progress: inbusiness.kz on <a href="https://www.inbusiness.kz/ru/last/zhatva-2025-po-kakomu-pokazatelyu-kostanajskie-agrarii-otstayut-ot-sko">4 September</a>, <a href="https://inbusiness.kz/ru/last/s-trudnostyami-i-ostanovkami-kak-dvizhetsya-uborka-v-kostanajskoj-oblasti">1 October</a> and <a href="https://www.inbusiness.kz/ru/last/uborka-2025-s-kakimi-pokazatelyami-idut-k-finishu-dva-severnyh-regiona-rk">16 October 2025</a>, citing the oblast's agriculture department. The 1 October article doesn't say which day its figure is for.</li>
+    </ul>
+  </section>
+</main>
+<div id="tip" role="status" aria-live="polite"></div>
+<script>window.DATA = /*DATA*/null;</script>
+<script>
+(function () {
+  "use strict";
+  const DATA = window.DATA;
+  const NS = "http://www.w3.org/2000/svg";
+  const DAY = 86400000;
+  const t = (s) => Date.parse(s + "T00:00:00Z");
+  const CHART_FROM = t("2025-07-01");
+  const CHART_TO = t("2025-10-25");
+  const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const shortDate = (s) => { const d = new Date(t(s)); return d.getUTCDate() + " " + MONTHS[d.getUTCMonth()]; };
+  const fixed = (v, n) => (v === null || v === undefined) ? "–" : (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v).toFixed(n);
+  const plain = (v, n) => (v === null || v === undefined) ? "–" : (v < 0 ? "−" : "") + Math.abs(v).toFixed(n);
+  const median = (xs) => { const s = xs.slice().sort((a, b) => a - b); const m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+
+  function el(tag, attrs, text) {
+    const node = document.createElement(tag);
+    for (const k in attrs || {}) node.setAttribute(k, attrs[k]);
+    if (text !== undefined) node.textContent = text;
+    return node;
+  }
+  function sv(tag, attrs, text) {
+    const node = document.createElementNS(NS, tag);
+    for (const k in attrs || {}) node.setAttribute(k, attrs[k]);
+    if (text !== undefined) node.textContent = text;
+    return node;
+  }
+
+  function withHead(table, row) {
+    const head = el("thead");
+    head.append(row);
+    table.append(head);
+  }
+
+  const fields = DATA.fields;
+  const isCutField = (f) => f.from !== null && !f.reading.startsWith("cut before");
+  const isUncut = (f) => f.reading.startsWith("no harvest");
+  const cutFields = fields.filter(isCutField);
+  const uncut = fields.filter(isUncut);
+  const fired = (f) => f.swirJump && f.swirJump.size >= DATA.swirJump;
+
+  function verdict(f) {
+    if (f.result === "inside") return ["good", "Jump inside the photo window"];
+    if (f.result === "one gap late") return ["warn", "Jump one photo after the window"];
+    if (f.result === "missed") return ["bad", "No jump, though the photos show a cut"];
+    if (f.reading.startsWith("cut before")) return ["neutral", "Cut hidden by cloud, nothing to compare"];
+    if (isUncut(f)) return fired(f) ? ["bad", "False jump on an uncut field"] : ["good", "No jump, as expected"];
+    return ["neutral", fired(f) ? "Jump found, but the box mixes two kinds of land" : "No clear jump, and the box mixes two kinds of land"];
+  }
+  function chip(f) {
+    const [kind, text] = verdict(f);
+    const mark = { good: "✓", warn: "≈", bad: "✗", neutral: "·" }[kind];
+    const c = el("span", { class: "chip " + kind });
+    c.append(el("span", { "aria-hidden": "true" }, mark), document.createTextNode(text));
+    return c;
+  }
+
+  /* ---------- Answer and tiles ---------- */
+  const inside = cutFields.filter((f) => f.result === "inside").length;
+  const late = cutFields.filter((f) => f.result === "one gap late").length;
+  const swirChanges = cutFields.map((f) => f.across && f.across.swir).filter((v) => v !== null && v !== undefined);
+  const uncutMax = Math.max(...uncut.map((f) => f.swirJump ? f.swirJump.size : 0));
+
+  const answer = document.getElementById("answer");
+  answer.append(
+    el("p", {}, "Yes, on these fields. When a field is cut, it turns paler, mostly in shortwave infrared, the satellite band that sees dry straw and soil best. In all " + cutFields.length + " fields where the photos show a cut, that brightness jumped by " + plain(Math.min(...swirChanges), 1) + " to " + plain(Math.max(...swirChanges), 1) + " points. On the fields nobody cut, it rose " + plain(uncutMax, 1) + " points at most."),
+    el("p", {}, "NDVI, the residue index NDTI and radar barely moved at the cut. NDVI had already dropped weeks earlier, when the crop ripened, which is why the plan said NDVI alone can't date the harvest."),
+    el("p", { class: "muted small" }, "This is a first look at a few fields I picked and read myself. The section “What this does not prove yet” lists what still needs checking.")
+  );
+
+  const tiles = document.getElementById("tiles");
+  [
+    [inside + " of " + cutFields.length, "cut fields where the rule's jump falls inside the photo window"],
+    [late + " of " + cutFields.length, "cut fields where it lands one photo later"],
+    [uncut.filter((f) => !fired(f)).length + " of " + uncut.length, "uncut fields with no false jump"],
+    ["8–15 days", "width of the photo windows, set by cloud gaps"]
+  ].forEach(([big, label]) => {
+    const tile = el("div", { class: "tile" });
+    tile.append(el("span", { class: "big" }, big), el("span", { class: "label" }, label));
+    tiles.append(tile);
+  });
+  document.getElementById("threshold").textContent = DATA.swirJump.toFixed(1);
+
+  /* ---------- Signals table ---------- */
+  (function () {
+    const table = document.getElementById("signals");
+    const head = el("tr");
+    [["Signal", ""], ["What it shows", ""], ["Change at the cut", "num"], ["Fields", "num"], ["Verdict", ""]].forEach(([h, c]) => head.append(el("th", c ? { class: c } : {}, h)));
+    withHead(table, head);
+    const body = el("tbody");
+    const rows = [
+      ["swir", "SWIR brightness (B11)", "How pale and dry the surface is, in reflectance points", 1, "", "good", "Rises at the cut in every field"],
+      ["ndvi", "NDVI", "Green leaf cover", 2, "", "neutral", "Already low from ripening, so flat at the cut"],
+      ["ndti", "NDTI", "Crop residue, from two SWIR bands", 2, "", "neutral", "Barely moves"],
+      ["gap", "Radar VH − VV", "Plant structure, in dB", 1, " dB", "neutral", "Small change; its big moves came with August rain"]
+    ];
+    rows.forEach(([key, name, what, places, unit, kind, text]) => {
+      const values = cutFields.map((f) => f.across && f.across[key]).filter((v) => v !== null && v !== undefined);
+      const tr = el("tr");
+      const nameCell = el("td");
+      nameCell.append(el("strong", {}, name));
+      tr.append(nameCell, el("td", {}, what), el("td", { class: "num" }, fixed(median(values), places) + unit), el("td", { class: "num" }, String(values.length)));
+      const v = el("td");
+      const c = el("span", { class: "chip " + kind });
+      c.textContent = text;
+      v.append(c);
+      tr.append(v);
+      body.append(tr);
+    });
+    table.append(body);
+  })();
+
+  /* ---------- Shared tooltip ---------- */
+  const tip = document.getElementById("tip");
+  function showTip(evt, title, rows) {
+    tip.replaceChildren(el("div", { class: "d" }, title));
+    rows.forEach(([color, label, value]) => {
+      const r = el("div", { class: "row" });
+      const key = el("i");
+      key.style.background = color;
+      r.append(key, el("b", {}, value), el("span", { class: "muted" }, label));
+      tip.append(r);
+    });
+    tip.style.display = "block";
+    const box = tip.getBoundingClientRect();
+    let x = evt.clientX + 14;
+    let y = evt.clientY + 14;
+    if (x + box.width > window.innerWidth - 8) x = evt.clientX - box.width - 14;
+    if (y + box.height > window.innerHeight - 8) y = evt.clientY - box.height - 14;
+    tip.style.left = Math.max(8, x) + "px";
+    tip.style.top = Math.max(8, y) + "px";
+  }
+  function hideTip() { tip.style.display = "none"; }
+
+  /* ---------- Line chart with crosshair ---------- */
+  function domainOf(values, pad) {
+    let lo = Math.min(...values), hi = Math.max(...values);
+    const p = (hi - lo) * pad;
+    return [lo - p, hi + p];
+  }
+  function niceTicks(lo, hi, count) {
+    const raw = (hi - lo) / count;
+    const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+    const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((s) => s >= raw);
+    const out = [];
+    for (let v = Math.ceil(lo / step) * step; v <= hi + 1e-9; v += step) out.push(Math.round(v / step) * step);
+    return out;
+  }
+
+  function chart(host, o) {
+    const W = 320, H = o.height || 128, m = { l: 34, r: 10, t: 10, b: 20 };
+    const xFrom = o.xFrom || CHART_FROM, xTo = o.xTo || CHART_TO;
+    const x = (d) => m.l + (t(d) - xFrom) / (xTo - xFrom) * (W - m.l - m.r);
+    const xt = (ms) => m.l + (ms - xFrom) / (xTo - xFrom) * (W - m.l - m.r);
+    const y = (v) => m.t + (o.domain[1] - v) / (o.domain[1] - o.domain[0]) * (H - m.t - m.b);
+    const svg = sv("svg", { class: "plot", viewBox: "0 0 " + W + " " + H, role: "img", tabindex: "0", "aria-label": o.aria });
+
+    niceTicks(o.domain[0], o.domain[1], 3).forEach((v) => {
+      svg.append(sv("line", { class: "grid", x1: m.l, x2: W - m.r, y1: y(v), y2: y(v) }));
+      svg.append(sv("text", { x: m.l - 5, y: y(v) + 3.5, "text-anchor": "end" }, plain(v, o.tickPlaces || 0)));
+    });
+    for (let month = 6; month <= 9; month++) {
+      const ms = Date.UTC(2025, month, 1);
+      if (ms < xFrom || ms > xTo) continue;
+      svg.append(sv("line", { class: "grid", x1: xt(ms), x2: xt(ms), y1: m.t, y2: H - m.b }));
+      svg.append(sv("text", { x: xt(ms) + 3, y: H - 6 }, MONTHS[month]));
+    }
+    if (o.band) {
+      svg.append(sv("rect", { class: "band", x: x(o.band[0]), y: m.t, width: Math.max(2, x(o.band[1]) - x(o.band[0])), height: H - m.t - m.b }));
+    }
+    if (o.jump) {
+      const mid = (t(o.jump.before) + t(o.jump.after)) / 2;
+      svg.append(sv("line", { class: "jump", x1: xt(mid), x2: xt(mid), y1: m.t, y2: H - m.b }));
+    }
+    o.series.forEach((s) => {
+      const pts = s.points.filter((p) => p.v !== null && p.v !== undefined);
+      if (pts.length > 1) {
+        svg.append(sv("polyline", { points: pts.map((p) => x(p.d).toFixed(1) + "," + y(p.v).toFixed(1)).join(" "), fill: "none", stroke: s.color, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }));
+      }
+      pts.forEach((p) => svg.append(sv("circle", { cx: x(p.d), cy: y(p.v), r: 3.2, fill: s.color, stroke: "var(--surface)", "stroke-width": 1.5 })));
+    });
+
+    const dates = [...new Set(o.series.flatMap((s) => s.points.filter((p) => p.v !== null).map((p) => p.d)))].sort();
+    const cross = sv("line", { class: "cross", y1: m.t, y2: H - m.b, visibility: "hidden" });
+    svg.append(cross);
+    function pick(d, evt) {
+      cross.setAttribute("x1", x(d));
+      cross.setAttribute("x2", x(d));
+      cross.setAttribute("visibility", "visible");
+      const rows = [];
+      o.series.forEach((s) => {
+        const p = s.points.find((q) => q.d === d && q.v !== null);
+        if (p) rows.push([s.color, s.label, plain(p.v, o.places) + (o.unit || "")]);
+      });
+      showTip(evt, shortDate(d) + (o.extra ? o.extra(d) : ""), rows);
+    }
+    function clear() { cross.setAttribute("visibility", "hidden"); hideTip(); }
+    svg.addEventListener("pointermove", (evt) => {
+      if (!dates.length) return;
+      const pt = svg.createSVGPoint();
+      pt.x = evt.clientX; pt.y = evt.clientY;
+      const local = pt.matrixTransform(svg.getScreenCTM().inverse());
+      let best = dates[0];
+      dates.forEach((d) => { if (Math.abs(x(d) - local.x) < Math.abs(x(best) - local.x)) best = d; });
+      pick(best, evt);
+    });
+    svg.addEventListener("pointerleave", clear);
+    let index = -1;
+    svg.addEventListener("keydown", (evt) => {
+      if (!dates.length || (evt.key !== "ArrowRight" && evt.key !== "ArrowLeft")) return;
+      evt.preventDefault();
+      index = Math.max(0, Math.min(dates.length - 1, index + (evt.key === "ArrowRight" ? 1 : -1)));
+      const r = svg.getBoundingClientRect();
+      pick(dates[index], { clientX: r.left + x(dates[index]) / W * r.width, clientY: r.top + 10 });
+    });
+    svg.addEventListener("blur", clear);
+    host.append(svg);
+  }
+
+  function chartBox(title, keys) {
+    const box = el("div", { class: "chart" });
+    const head = el("div", { class: "chart-title" });
+    head.append(el("strong", {}, title));
+    if (keys) {
+      const k = el("span");
+      keys.forEach(([color, label]) => {
+        const key = el("span", { class: "key" });
+        const line = el("i");
+        line.style.background = color;
+        key.append(line, document.createTextNode(label));
+        k.append(key, document.createTextNode(" "));
+      });
+      head.append(k);
+    }
+    box.append(head);
+    return box;
+  }
+
+  /* ---------- Shared scales ---------- */
+  const allOptical = fields.flatMap((f) => f.optical);
+  const allRadar = fields.flatMap((f) => f.radar);
+  const swirDomain = domainOf(allOptical.map((p) => p.swir), 0.06);
+  const ndviDomain = [0, 0.95];
+  const gapDomain = domainOf(allRadar.map((p) => p.gap), 0.06);
+  const rainBy = Object.fromEntries(DATA.rain.map((r) => [r.d, r.mm]));
+  const rainNote = (d) => {
+    let mm = 0;
+    for (let i = 0; i < 3; i++) mm += rainBy[new Date(t(d) - i * DAY).toISOString().slice(0, 10)] || 0;
+    return mm >= 5 ? " · " + mm.toFixed(0) + " mm rain in 3 days" : "";
+  };
+
+  /* ---------- Rain ---------- */
+  (function () {
+    const host = document.getElementById("rain");
+    const head = el("div", { class: "chart-title" });
+    head.append(el("strong", {}, "Rain per day, mm"), el("span", {}, "Wet ground darkens the infrared and changes the radar"));
+    host.append(head);
+    const W = 640, H = 70, m = { l: 34, r: 10, t: 6, b: 18 };
+    const xt = (ms) => m.l + (ms - CHART_FROM) / (CHART_TO - CHART_FROM) * (W - m.l - m.r);
+    const max = Math.max(...DATA.rain.map((r) => r.mm));
+    const top = Math.ceil(max / 5) * 5;
+    const y = (v) => m.t + (top - v) / top * (H - m.t - m.b);
+    const svg = sv("svg", { class: "plot", viewBox: "0 0 " + W + " " + H, role: "img", "aria-label": "Daily rainfall from July to October 2025" });
+    [0, top].forEach((v) => {
+      svg.append(sv("line", { class: "grid", x1: m.l, x2: W - m.r, y1: y(v), y2: y(v) }));
+      svg.append(sv("text", { x: m.l - 5, y: y(v) + 3.5, "text-anchor": "end" }, String(v)));
+    });
+    for (let month = 6; month <= 9; month++) {
+      const ms = Date.UTC(2025, month, 1);
+      svg.append(sv("text", { x: xt(ms) + 3, y: H - 5 }, MONTHS[month]));
+    }
+    const barW = Math.max(1.5, (W - m.l - m.r) / ((CHART_TO - CHART_FROM) / DAY) - 1);
+    DATA.rain.forEach((r) => {
+      if (r.mm <= 0) return;
+      const bar = sv("rect", { x: xt(t(r.d)) - barW / 2, y: y(r.mm), width: barW, height: y(0) - y(r.mm), fill: "var(--rain)", rx: Math.min(1.5, barW / 2) });
+      bar.addEventListener("pointermove", (evt) => showTip(evt, shortDate(r.d), [["var(--rain)", "rain", r.mm.toFixed(1) + " mm"]]));
+      bar.addEventListener("pointerleave", hideTip);
+      svg.append(bar);
+    });
+    host.append(svg);
+  })();
+
+  /* ---------- Timeline against regional news ---------- */
+  (function () {
+    const host = document.getElementById("timeline");
+    const rows = fields.filter((f) => f.from !== null);
+    const W = 640, rowH = 26, m = { l: 44, r: 16, t: 42, b: 22 };
+    const H = m.t + rows.length * rowH + m.b;
+    const from = t("2025-07-12"), to = t("2025-10-20");
+    const xt = (ms) => m.l + (ms - from) / (to - from) * (W - m.l - m.r);
+    const svg = sv("svg", { class: "plot", viewBox: "0 0 " + W + " " + H, role: "img", "aria-label": "Cut windows for each field against regional harvest progress" });
+    for (let month = 6; month <= 9; month++) {
+      const ms = Date.UTC(2025, month, 1);
+      if (ms < from) continue;
+      svg.append(sv("line", { class: "grid", x1: xt(ms), x2: xt(ms), y1: m.t - 4, y2: H - m.b }));
+      svg.append(sv("text", { x: xt(ms) + 3, y: H - 6 }, MONTHS[month]));
+    }
+    [["2025-09-04", "≈25% cut"], ["2025-10-01", "73%"], ["2025-10-16", "95%"]].forEach(([d, label], i) => {
+      svg.append(sv("line", { x1: xt(t(d)), x2: xt(t(d)), y1: 14, y2: H - m.b, stroke: "var(--ink-2)", "stroke-width": 1 }));
+      svg.append(sv("text", { class: "lbl", x: xt(t(d)) + (i === 2 ? -4 : 4), y: 12 + (i === 1 ? 14 : 0), "text-anchor": i === 2 ? "end" : "start" }, label + " · " + shortDate(d)));
+    });
+    rows.forEach((f, i) => {
+      const yy = m.t + i * rowH + rowH / 2;
+      svg.append(sv("text", { x: m.l - 8, y: yy + 3.5, "text-anchor": "end", class: "lbl" }, f.name));
+      const x1 = xt(t(f.from)), x2 = xt(t(f.to));
+      const bar = sv("rect", { x: x1, y: yy - 6, width: Math.max(3, x2 - x1), height: 12, rx: 3, fill: f.reading.startsWith("cut before") ? "var(--rule)" : "var(--accent)", opacity: f.reading.startsWith("cut before") ? 1 : 0.85 });
+      bar.addEventListener("pointermove", (evt) => showTip(evt, f.name + ": " + shortDate(f.from) + " to " + shortDate(f.to), [["var(--accent)", f.reading, ""]]));
+      bar.addEventListener("pointerleave", hideTip);
+      svg.append(bar);
+      if (fired(f) && isCutField(f)) {
+        const mid = (t(f.swirJump.before) + t(f.swirJump.after)) / 2;
+        svg.append(sv("circle", { cx: xt(mid), cy: yy, r: 4.5, fill: "var(--ink)", stroke: "var(--surface)", "stroke-width": 2 }));
+      }
+    });
+    const legend = el("div", { class: "legend-row small" });
+    [["var(--accent)", "cut seen in photos", "swatch"], ["var(--rule)", "cut somewhere in a cloud gap", "swatch"], ["var(--ink)", "rule's jump (midpoint)", "dot"]].forEach(([c, label, kind]) => {
+      const k = el("span", { class: "key" });
+      const i = el("i", { class: "swatch" });
+      i.style.background = c;
+      if (kind === "dot") { i.style.borderRadius = "50%"; i.style.width = "9px"; i.style.height = "9px"; }
+      k.append(i, document.createTextNode(label));
+      legend.append(k);
+    });
+    host.append(svg, legend);
+  })();
+
+  /* ---------- Results table ---------- */
+  (function () {
+    const table = document.getElementById("results");
+    const head = el("tr");
+    [["Box", ""], ["What the photos show", ""], ["Cut window", ""], ["Rule's jump", ""], ["Size", "num"], ["Result", ""]].forEach(([h, c]) => head.append(el("th", c ? { class: c } : {}, h)));
+    withHead(table, head);
+    const body = el("tbody");
+    fields.forEach((f) => {
+      const tr = el("tr");
+      const name = el("td");
+      name.append(el("strong", {}, f.name), el("div", { class: "muted small" }, f.kind));
+      const j = f.swirJump;
+      tr.append(
+        name,
+        el("td", {}, f.reading),
+        el("td", { class: "num" }, f.from ? shortDate(f.from) + " – " + shortDate(f.to) : "–"),
+        el("td", { class: "num" }, j && fired(f) ? shortDate(j.before) + " – " + shortDate(j.after) : "none"),
+        el("td", { class: "num" }, j ? fixed(j.size, 1) : "–")
+      );
+      const res = el("td");
+      res.append(chip(f));
+      tr.append(res);
+      body.append(tr);
+    });
+    table.append(body);
+  })();
+
+  /* ---------- Field cards ---------- */
+  const cards = document.getElementById("cards");
+  fields.forEach((f) => {
+    const card = el("article", { class: "card", id: "box-" + f.name.toLowerCase() });
+    const head = el("div", { class: "card-head" });
+    head.append(el("h3", {}, f.name + " · " + f.reading), chip(f), el("span", { class: "where num" }, f.lat.toFixed(4) + "° N, " + f.lon.toFixed(4) + "° E"));
+    card.append(head, el("p", { class: "muted" }, f.note + "."));
+
+    const band = f.from ? [f.from, f.to] : null;
+    const jump = fired(f) ? f.swirJump : null;
+    const grid = el("div", { class: "charts" });
+
+    const c1 = chartBox("SWIR brightness, %");
+    chart(c1, { aria: f.name + " SWIR brightness from July to October", domain: swirDomain, places: 1, unit: "%", band, jump,
+      series: [{ label: "SWIR", color: "var(--swir)", points: f.optical.map((p) => ({ d: p.d, v: p.swir })) }], extra: rainNote });
+    const c2 = chartBox("NDVI");
+    chart(c2, { aria: f.name + " NDVI from July to October", domain: ndviDomain, places: 2, tickPlaces: 1, band,
+      series: [{ label: "NDVI", color: "var(--ndvi)", points: f.optical.map((p) => ({ d: p.d, v: p.ndvi })) }], extra: rainNote });
+    const c3 = chartBox("Radar VH − VV, dB", [["var(--orbit-a)", "162"], ["var(--orbit-b)", "89"]]);
+    chart(c3, { aria: f.name + " radar polarisation gap from July to October", domain: gapDomain, places: 1, unit: " dB", band,
+      series: [162, 89].map((track, i) => ({ label: "orbit " + track, color: i ? "var(--orbit-b)" : "var(--orbit-a)",
+        points: f.radar.filter((p) => p.track === track).map((p) => ({ d: p.d, v: p.gap })) })), extra: rainNote });
+    grid.append(c1, c2, c3);
+    card.append(grid);
+
+    const strip = el("figure", { class: "strip" });
+    const img = el("img", { src: "strips/" + f.name + ".jpg", alt: f.name + ": true-colour photos of the box on each clear date from July to October", loading: "lazy" });
+    img.addEventListener("error", () => strip.remove());
+    strip.append(img, el("figcaption", {}, "True-colour photos on the clearest dates, oldest first. The white frame is the box."));
+    card.append(strip);
+
+    const details = el("details");
+    details.append(el("summary", {}, "Show the numbers"));
+    const pair = el("div", { class: "tables-pair" });
+    const t1 = el("table");
+    const h1 = el("tr");
+    ["Date", "NDVI", "NDTI", "SWIR %"].forEach((h, i) => h1.append(el("th", i ? { class: "num" } : {}, h)));
+    withHead(t1, h1);
+    const b1 = el("tbody");
+    f.optical.forEach((p) => {
+      const tr = el("tr");
+      tr.append(el("td", {}, shortDate(p.d)), el("td", { class: "num" }, plain(p.ndvi, 2)), el("td", { class: "num" }, plain(p.ndti, 3)), el("td", { class: "num" }, plain(p.swir, 1)));
+      b1.append(tr);
+    });
+    t1.append(b1);
+    const t2 = el("table");
+    const h2 = el("tr");
+    ["Date", "Orbit", "VV dB", "VH dB", "Gap dB"].forEach((h, i) => h2.append(el("th", i ? { class: "num" } : {}, h)));
+    withHead(t2, h2);
+    const b2 = el("tbody");
+    f.radar.forEach((p) => {
+      const tr = el("tr");
+      tr.append(el("td", {}, shortDate(p.d)), el("td", { class: "num" }, String(p.track)), el("td", { class: "num" }, plain(p.vv, 1)), el("td", { class: "num" }, plain(p.vh, 1)), el("td", { class: "num" }, plain(p.gap, 1)));
+      b2.append(tr);
+    });
+    t2.append(b2);
+    const s1 = el("div", { class: "scroll" }); s1.append(t1);
+    const s2 = el("div", { class: "scroll" }); s2.append(t2);
+    pair.append(s1, s2);
+    details.append(pair);
+    card.append(details);
+    cards.append(card);
+  });
+
+  /* ---------- Copy buttons ---------- */
+  document.querySelectorAll("button.copy").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const text = document.getElementById(button.dataset.copy).textContent;
+      const label = button.textContent;
+      try {
+        await navigator.clipboard.writeText(text);
+        button.textContent = "Copied";
+      } catch (e) {
+        button.textContent = "Select the text and copy it";
+      }
+      setTimeout(() => { button.textContent = label; }, 1800);
+    });
+  });
+})();
+</script>
+</body>
+</html>
