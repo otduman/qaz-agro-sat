@@ -39,6 +39,8 @@ public final class SyntheticTiff {
     private int compression = 8;
     private int predictor = 2;
     private int samples = 1;
+    private int sampleFormat = 1;
+    private byte[] rawTile;
     private int ghostBytes = 16;
     private int epsg = 32641;
     private double originX = 499980;
@@ -61,10 +63,14 @@ public final class SyntheticTiff {
     public SyntheticTiff compression(int value) { compression = value; return this; }
     public SyntheticTiff predictor(int value) { predictor = value; return this; }
     public SyntheticTiff samples(int value) { samples = value; return this; }
+    public SyntheticTiff sampleFormat(int value) { sampleFormat = value; return this; }
     public SyntheticTiff ghostBytes(int value) { ghostBytes = value; return this; }
     public SyntheticTiff nodata(String value) { nodata = value; return this; }
     public SyntheticTiff sparseTile(int index) { sparseTiles.add(index); return this; }
     public SyntheticTiff corruptTiles() { corruptTiles = true; return this; }
+
+    /** Stores these bytes as every tile, before compression, instead of encoding the pixels. */
+    public SyntheticTiff rawTile(byte[] value) { rawTile = value; return this; }
 
     public SyntheticTiff geo(int code, double x, double y, double size) {
         epsg = code;
@@ -149,7 +155,7 @@ public final class SyntheticTiff {
         list.add(new Entry(323, SHORT, 1, shorts(tileHeight)));
         list.add(new Entry(324, LONG, offsets.length, longs(offsets)));
         list.add(new Entry(325, LONG, counts.length, longs(counts)));
-        list.add(new Entry(339, SHORT, 1, shorts(1)));
+        list.add(new Entry(339, SHORT, 1, shorts(sampleFormat)));
         list.add(new Entry(33550, DOUBLE, 3, doubles(pixelSize, pixelSize, 0)));
         list.add(new Entry(33922, DOUBLE, 6, doubles(0, 0, 0, originX, originY, 0)));
         list.add(new Entry(34735, SHORT, 16, shorts(
@@ -163,6 +169,9 @@ public final class SyntheticTiff {
     }
 
     private byte[] encodeTile(int tileCol, int tileRow) {
+        if (rawTile != null) {
+            return compressed(rawTile);
+        }
         int[] values = new int[tileWidth * tileHeight];
         for (int y = 0; y < tileHeight; y++) {
             for (int x = 0; x < tileWidth; x++) {
@@ -184,7 +193,9 @@ public final class SyntheticTiff {
         }
         ByteBuffer raw = ByteBuffer.allocate(values.length * bits / 8).order(order);
         for (int value : values) {
-            if (bits == 16) {
+            if (bits == 32) {
+                raw.putInt(value);
+            } else if (bits == 16) {
                 raw.putShort((short) value);
             } else {
                 raw.put((byte) value);
@@ -193,7 +204,11 @@ public final class SyntheticTiff {
         if (corruptTiles) {
             return new byte[] {1, 2, 3, 4, 5, 6, 7, 8};
         }
-        return compression == 8 || compression == 32946 ? deflate(raw.array()) : raw.array();
+        return compressed(raw.array());
+    }
+
+    private byte[] compressed(byte[] raw) {
+        return compression == 8 || compression == 32946 ? deflate(raw) : raw;
     }
 
     private static byte[] deflate(byte[] data) {

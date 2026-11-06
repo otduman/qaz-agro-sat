@@ -15,6 +15,7 @@ import kz.kazagrosat.pipeline.testutil.SyntheticTiff;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 class CogReaderTest {
 
@@ -24,6 +25,24 @@ class CogReaderTest {
 
     private static SyntheticTiff tenBySeven() {
         return new SyntheticTiff(10, 7, 4, 4).pixels((x, y) -> y * 100 + x);
+    }
+
+    /** Laid out like the Sentinel-1 RTC files: 32-bit floats with -32768 as nodata. */
+    private static SyntheticTiff floats(int width, int height, int tileWidth, int tileHeight) {
+        return new SyntheticTiff(width, height, tileWidth, tileHeight)
+                .bits(32).sampleFormat(3).predictor(1).nodata("-32768");
+    }
+
+    private static int bitsOf(float value) {
+        return Float.floatToRawIntBits(value);
+    }
+
+    private static byte[] bytes(int... values) {
+        byte[] bytes = new byte[values.length];
+        for (int i = 0; i < bytes.length; i++) {
+            bytes[i] = (byte) values[i];
+        }
+        return bytes;
     }
 
     @Test
@@ -176,6 +195,111 @@ class CogReaderTest {
         IOException error = assertThrows(IOException.class, () -> open(file));
 
         assertTrue(error.getMessage().contains("3 samples"), error.getMessage());
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void stitchesFloatPixelsAcrossTiles(boolean bigEndian) throws Exception {
+        byte[] file = floats(10, 7, 4, 4)
+                .order(bigEndian ? ByteOrder.BIG_ENDIAN : ByteOrder.LITTLE_ENDIAN)
+                .pixels((x, y) -> bitsOf(y + x / 8f))
+                .build();
+
+        float[] window = open(file).readFloatWindow(new PixelWindow(3, 2, 2, 3));
+
+        assertArrayEquals(new float[] {2.375f, 2.5f, 3.375f, 3.5f, 4.375f, 4.5f}, window);
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void undoesTheFloatingPointPredictorRowByRow(boolean bigEndian) throws Exception {
+        // Worked by hand from TIFF Technical Note 3. 1.0 is 3F 80 00 00 and 2.0 is 40 00 00 00. A row
+        // stores the first byte of every pixel, then the second, and so on, with each byte kept as
+        // its difference from the byte before. Every row starts afresh, and the layout is the same
+        // whatever the byte order of the file.
+        byte[] tile = bytes(
+                0x3F, 0x01, 0x40, 0x80, 0x00, 0x00, 0x00, 0x00,
+                0x40, 0xFF, 0xC1, 0x80, 0x80, 0x00, 0x00, 0x00);
+        byte[] file = floats(2, 2, 2, 2)
+                .predictor(3)
+                .order(bigEndian ? ByteOrder.BIG_ENDIAN : ByteOrder.LITTLE_ENDIAN)
+                .rawTile(tile)
+                .build();
+
+        assertArrayEquals(new float[] {1f, 2f, 2f, 1f}, open(file).readFloatWindow(new PixelWindow(0, 0, 2, 2)));
+    }
+
+    @Test
+    void turnsFloatNodataIntoNaN() throws Exception {
+        byte[] file = floats(2, 1, 2, 2).pixels((x, y) -> bitsOf(x == 0 ? -32768f : 0.25f)).build();
+
+        assertArrayEquals(new float[] {Float.NaN, 0.25f}, open(file).readFloatWindow(new PixelWindow(0, 0, 2, 1)));
+    }
+
+    @Test
+    void fillsSparseFloatTilesWithNaN() throws Exception {
+        byte[] file = floats(4, 2, 2, 2).sparseTile(1).pixels((x, y) -> bitsOf(1.5f)).build();
+
+        assertArrayEquals(new float[] {1.5f, 1.5f, Float.NaN, Float.NaN},
+                open(file).readFloatWindow(new PixelWindow(0, 0, 4, 1)));
+    }
+
+    @Test
+    void acceptsNanAsTheFloatNodataValue() throws Exception {
+        byte[] file = floats(2, 1, 2, 2).nodata("nan").sparseTile(0).build();
+
+        assertArrayEquals(new float[] {Float.NaN, Float.NaN}, open(file).readFloatWindow(new PixelWindow(0, 0, 2, 1)));
+    }
+
+    @Test
+    void refusesToReadFloatPixelsAsIntegers() throws Exception {
+        CogReader reader = open(floats(2, 2, 2, 2).build());
+
+        assertThrows(IllegalStateException.class, () -> reader.readWindow(new PixelWindow(0, 0, 1, 1)));
+    }
+
+    @Test
+    void refusesToReadIntegerPixelsAsFloats() throws Exception {
+        CogReader reader = open(tenBySeven().build());
+
+        assertThrows(IllegalStateException.class, () -> reader.readFloatWindow(new PixelWindow(0, 0, 1, 1)));
+    }
+
+    @ParameterizedTest
+    @CsvSource({"16", "64"})
+    void rejectsFloatsThatAreNot32Bit(int bits) {
+        byte[] file = floats(2, 2, 2, 2).bits(bits).build();
+
+        IOException error = assertThrows(IOException.class, () -> open(file));
+
+        assertTrue(error.getMessage().contains("bit depth " + bits), error.getMessage());
+    }
+
+    @Test
+    void rejectsSignedIntegerPixels() {
+        byte[] file = tenBySeven().sampleFormat(2).build();
+
+        IOException error = assertThrows(IOException.class, () -> open(file));
+
+        assertTrue(error.getMessage().contains("sample format 2"), error.getMessage());
+    }
+
+    @Test
+    void rejectsTheFloatingPointPredictorOnIntegerPixels() {
+        byte[] file = tenBySeven().predictor(3).build();
+
+        IOException error = assertThrows(IOException.class, () -> open(file));
+
+        assertTrue(error.getMessage().contains("predictor 3"), error.getMessage());
+    }
+
+    @Test
+    void rejectsTheIntegerPredictorOnFloatPixels() {
+        byte[] file = floats(2, 2, 2, 2).predictor(2).build();
+
+        IOException error = assertThrows(IOException.class, () -> open(file));
+
+        assertTrue(error.getMessage().contains("predictor 2"), error.getMessage());
     }
 
     @Test
