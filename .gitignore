@@ -1,0 +1,14 @@
+# Build output
+target/
+
+# Generated maps, reproducible with the CLI
+output/
+
+# Editor and IDE files
+.idea/
+.vscode/
+*.iml
+.classpath
+.project
+.settings/
+.factorypath
