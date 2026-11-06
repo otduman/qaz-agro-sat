@@ -106,6 +106,9 @@ final class Report {
             box.put("swirJump", jump.map(Report::step).orElse(null));
             box.put("radarDrop", Analysis.radarDrop(radarRows).map(Report::step).orElse(null));
             box.put("result", result(reading, jump));
+            Optional<Analysis.Step> jumpV2 = Analysis.swirJumpV2(clear);
+            box.put("swirJumpV2", jumpV2.map(Report::step).orElse(null));
+            box.put("resultV2", result(reading, jumpV2));
             box.put("across", cutWindow(reading) ? across(clear, radarRows, reading.from(), reading.to(), rain) : null);
         }
 

@@ -25,23 +25,23 @@ final class AnalysisTable {
         List<Analysis.RadarRow> radar = Analysis.loadRadar(folder.resolve("radar.csv"));
         Map<String, Analysis.Reading> readings = Analysis.loadReadings(run.readings());
 
-        out.printf("%-4s %-33s %-15s %-21s %-21s %s%n",
-                "box", "photos", "photo window", "SWIR jump", "radar gap drop", "result");
+        out.printf("%-4s %-33s %-15s %-21s %-14s %-21s %s%n",
+                "box", "photos", "photo window", "SWIR jump", "result", "rule v2 jump", "rule v2 result");
         for (Field field : run.fields()) {
             Analysis.Reading reading = readings.get(field.name());
             if (reading == null) {
                 out.printf("%-4s no photo reading%n", field.name());
                 continue;
             }
-            Optional<Analysis.Step> jump = Analysis.swirJump(Analysis.clearRows(optical, field.name()));
-            Optional<Analysis.Step> drop = Analysis.radarDrop(
-                    radar.stream().filter(row -> row.field().equals(field.name())).toList());
+            List<Analysis.OpticalRow> clear = Analysis.clearRows(optical, field.name());
+            Optional<Analysis.Step> jump = Analysis.swirJump(clear);
+            Optional<Analysis.Step> jumpV2 = Analysis.swirJumpV2(clear);
             String window = reading.hasWindow()
                     ? reading.from().toString().substring(5) + " to " + reading.to().toString().substring(5)
                     : "-";
-            out.printf("%-4s %-33s %-15s %-21s %-21s %s%n", field.name(), reading.label(), window,
-                    jump.map(AnalysisTable::describe).orElse("no usable dates"),
-                    drop.map(AnalysisTable::describe).orElse("-"), Report.result(reading, jump));
+            out.printf("%-4s %-33s %-15s %-21s %-14s %-21s %s%n", field.name(), reading.label(), window,
+                    jump.map(AnalysisTable::describe).orElse("no usable dates"), Report.result(reading, jump),
+                    jumpV2.map(AnalysisTable::describe).orElse("no usable dates"), Report.result(reading, jumpV2));
         }
     }
 

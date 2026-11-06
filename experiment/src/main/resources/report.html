@@ -172,7 +172,7 @@ button.copy { justify-self: start; font: 600 14px var(--body); color: var(--acce
 <main>
   <header class="top">
     <h1>Can satellites see the harvest cut?</h1>
-    <p class="meta">KazAgroSat Phase 2 experiment · 20 × 20 km test area in Kostanay oblast · seasons 2024 and 2025</p>
+    <p class="meta">KazAgroSat Phase 2 experiment · 20 × 20 km test area in Kostanay oblast · seasons 2023 to 2025</p>
   </header>
 
 <!--FINDINGS-->
@@ -259,25 +259,29 @@ start experiment-output\index.html</pre>
 
   const isGap = (f) => f.reading.startsWith("cut before");
 
-  function verdict(f) {
-    if (f.result === "unread") return ["neutral", "Photos not read yet"];
+  /** Judges one rule's result for a box: v1 by default, or rule v2 when asked. */
+  function verdict(f, v2) {
+    const result = v2 ? f.resultV2 : f.result;
+    const jump = v2 ? f.swirJumpV2 : f.swirJump;
+    const didFire = !!jump && jump.size >= DATA.swirJump;
+    if (result === "unread" || result === undefined) return ["neutral", "Photos not read yet"];
     if (isGap(f)) {
-      if (f.result === "inside") return ["good", "Jump inside the cloud gap"];
-      if (f.result === "one gap late") return ["warn", "Jump one photo after the cloud gap"];
-      if (f.result === "one gap early") return ["warn", "Jump one photo before the cloud gap"];
-      if (f.result === "elsewhere") return ["bad", "Jump at a different time"];
+      if (result === "inside") return ["good", "Jump inside the cloud gap"];
+      if (result === "one gap late") return ["warn", "Jump one photo after the cloud gap"];
+      if (result === "one gap early") return ["warn", "Jump one photo before the cloud gap"];
+      if (result === "elsewhere") return ["bad", "Jump at a different time"];
       return ["neutral", "No jump: cut before the first clear ripe photo"];
     }
-    if (f.result === "inside") return ["good", "Jump inside the photo window"];
-    if (f.result === "one gap late") return ["warn", "Jump one photo after the window"];
-    if (f.result === "one gap early") return ["warn", "Jump one photo before the window"];
-    if (f.result === "elsewhere") return ["bad", "Jump at a different time"];
-    if (f.result === "missed") return ["bad", "No jump, though the photos show a cut"];
-    if (isUncut(f)) return fired(f) ? ["bad", "False jump on an uncut field"] : ["good", "No jump, as expected"];
-    return ["neutral", fired(f) ? "Jump found, but the box mixes two kinds of land" : "No clear jump, and the box mixes two kinds of land"];
+    if (result === "inside") return ["good", "Jump inside the photo window"];
+    if (result === "one gap late") return ["warn", "Jump one photo after the window"];
+    if (result === "one gap early") return ["warn", "Jump one photo before the window"];
+    if (result === "elsewhere") return ["bad", "Jump at a different time"];
+    if (result === "missed") return ["bad", "No jump, though the photos show a cut"];
+    if (isUncut(f)) return didFire ? ["bad", "False jump on an uncut field"] : ["good", "No jump, as expected"];
+    return ["neutral", didFire ? "Jump found, but the box mixes two kinds of land" : "No clear jump, and the box mixes two kinds of land"];
   }
-  function chip(f) {
-    const [kind, text] = verdict(f);
+  function chip(f, v2) {
+    const [kind, text] = verdict(f, v2);
     const mark = { good: "✓", warn: "≈", bad: "✗", neutral: "·" }[kind];
     const c = el("span", { class: "chip " + kind });
     c.append(el("span", { "aria-hidden": "true" }, mark), document.createTextNode(text));
@@ -424,6 +428,8 @@ start experiment-output\index.html</pre>
     const gap = fields.filter(isGap);
     const count = (r) => cut.filter((f) => f.result === r).length;
     const gapSeen = gap.filter((f) => ["inside", "one gap late", "one gap early"].includes(f.result)).length;
+    const nearV2 = cut.filter((f) => ["inside", "one gap late", "one gap early"].includes(f.resultV2)).length;
+    const falseV2 = uncut.filter((f) => !!f.swirJumpV2 && f.swirJumpV2.size >= DATA.swirJump).length;
 
     const tiles = el("div", { class: "tiles" });
     [
@@ -431,7 +437,8 @@ start experiment-output\index.html</pre>
       [(count("one gap late") + count("one gap early")) + " of " + cut.length, "where it lands one photo off"],
       [(count("missed") + count("elsewhere")) + " of " + cut.length, "where the rule misses"],
       [uncut.filter((f) => !fired(f)).length + " of " + uncut.length, "uncut boxes with no false jump"],
-      [gapSeen + " of " + gap.length, "fields cut during a cloud gap where the rule still finds the jump in or next to the gap"]
+      [gapSeen + " of " + gap.length, "fields cut during a cloud gap where the rule still finds the jump in or next to the gap"],
+      [nearV2 + " of " + cut.length, "cut fields within one photo with rule v2" + (run.year === 2023 ? "" : ", which was designed after seeing this round") + "; " + falseV2 + " false jumps on uncut boxes"]
     ].forEach(([big, label]) => {
       const tile = el("div", { class: "tile" });
       tile.append(el("span", { class: "big" }, big), el("span", { class: "label" }, label));
@@ -483,7 +490,7 @@ start experiment-output\index.html</pre>
     const rt = el("div", { class: "part" });
     rt.append(el("h3", {}, "Every box"));
     const table = el("table");
-    withHead(table, [["Box", ""], ["What the photos show", ""], ["Cut window", ""], ["Rule's jump", ""], ["Size", "num"], ["Result", ""]]);
+    withHead(table, [["Box", ""], ["What the photos show", ""], ["Cut window", ""], ["Rule's jump", ""], ["Size", "num"], ["Result", ""], ["Rule v2", ""]]);
     const body = el("tbody");
     fields.forEach((f) => {
       const tr = el("tr");
@@ -500,7 +507,11 @@ start experiment-output\index.html</pre>
         el("td", { class: "num" }, j ? fixed(j.size, 1) : "–"));
       const res = el("td");
       res.append(chip(f));
-      tr.append(res);
+      const j2 = f.swirJumpV2;
+      const res2 = el("td");
+      res2.append(chip(f, true));
+      if (j2 && j2.size >= DATA.swirJump) res2.append(el("div", { class: "muted small" }, shortDate(j2.before) + " – " + shortDate(j2.after) + ", " + fixed(j2.size, 1)));
+      tr.append(res, res2);
       body.append(tr);
     });
     table.append(body);
