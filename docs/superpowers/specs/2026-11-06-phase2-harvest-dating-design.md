@@ -133,7 +133,8 @@ date as cloudy and skip its bands. This is my call.
 - tile cloud cover;
 - clear share of the area;
 - status: stored, or cloudy and skipped;
-- the scale and offset of each band.
+- the scale, offset and nodata value that the six bands share. A date whose bands disagree on
+  these is refused, not stored.
 
 Reflectance is computed when the files are read, using the stored scale and offset.
 
