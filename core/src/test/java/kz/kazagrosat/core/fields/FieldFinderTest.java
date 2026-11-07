@@ -165,11 +165,13 @@ class FieldFinderTest {
 
     @Test
     void aFaintStripAcrossAFieldIsMergedBack() throws Exception {
-        // A 3-row wet strip, 0.06 lower on 3 dates: its edges split the calm area in two, but the ridge is
-        // weak and the two halves have the same curve, so they merge back into one field.
+        // A 3-row wet strip, lower on 3 dates by a step between the calm level and the weak-ridge limit: its
+        // edges split the calm area in two, but the ridge is weak and the two halves have the same curve, so
+        // they merge back into one field.
+        float depth = (float) ((P.markerEdge() + P.ridgeWeak()) / 2);
         SyntheticSeason season = new SyntheticSeason((x, y, d) -> {
             boolean wet = y >= 59 && y <= 61 && (d == 3 || d == 6 || d == 9);
-            return wet ? wheat(d) - 0.06f : wheat(d);
+            return wet ? wheat(d) - depth : wheat(d);
         });
 
         FieldMap map = find(season);

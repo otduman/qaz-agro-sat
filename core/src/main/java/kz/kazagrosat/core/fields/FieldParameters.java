@@ -58,7 +58,7 @@ public record FieldParameters(
         double simplifyMetres) {
 
     public static final FieldParameters DEFAULTS = new FieldParameters(
-            5.0, 3, 0.05, 3, 50, 0.08, 0.05, 5, 0.6, 5.0, 1.0, 5,
+            5.0, 3, 0.15, 2, 50, 0.2, 0.05, 5, 0.6, 5.0, 1.0, 5,
             MonthDay.of(6, 15), 0.3, 0.5, MonthDay.of(6, 20), 0.25, MonthDay.of(9, 30),
             0.3, 0.7, 0.05, 0.25, 10.0);
 
