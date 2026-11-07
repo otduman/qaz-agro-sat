@@ -49,17 +49,20 @@ public final class TestHttpServer implements AutoCloseable {
 
     /** Serves a file the way S3 does: Range requests get 206 and just those bytes. */
     public void serveFile(String path, byte[] file) {
-        handle(path, exchange -> {
-            String range = exchange.getRequestHeaders().getFirst("Range");
-            if (range == null) {
-                respond(exchange, 200, file);
-                return;
-            }
-            String[] bounds = range.substring("bytes=".length()).split("-");
-            int start = Integer.parseInt(bounds[0]);
-            int end = Math.min(Integer.parseInt(bounds[1]) + 1, file.length);
-            respond(exchange, 206, java.util.Arrays.copyOfRange(file, start, end));
-        });
+        handle(path, exchange -> respondRange(exchange, file));
+    }
+
+    /** Answers a request for a file the way S3 does: a Range request gets 206 and just those bytes. */
+    public static void respondRange(HttpExchange exchange, byte[] file) throws IOException {
+        String range = exchange.getRequestHeaders().getFirst("Range");
+        if (range == null) {
+            respond(exchange, 200, file);
+            return;
+        }
+        String[] bounds = range.substring("bytes=".length()).split("-");
+        int start = Integer.parseInt(bounds[0]);
+        int end = Math.min(Integer.parseInt(bounds[1]) + 1, file.length);
+        respond(exchange, 206, java.util.Arrays.copyOfRange(file, start, Math.max(start, end)));
     }
 
     public static void respond(HttpExchange exchange, int status, byte[] body) throws IOException {

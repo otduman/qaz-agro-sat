@@ -143,11 +143,16 @@ public final class HarvestSignalExperiment {
         try (PrintWriter out = new PrintWriter(Files.newBufferedWriter(file, StandardCharsets.UTF_8))) {
             out.println("field,date,scene,clear,bare,ndvi,ndti,blue,green,red,nir,swir16,swir22");
             for (OpticalPass.Row r : rows) {
-                out.println(String.format(Locale.ROOT, "%s,%s,%s,%.3f,%.3f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f",
-                        r.field(), r.date(), r.scene(), r.clear(), r.bare(), r.ndvi(), r.ndti(),
-                        r.blue(), r.green(), r.red(), r.nir(), r.swir16(), r.swir22()));
+                out.println(opticalLine(r));
             }
         }
+    }
+
+    /** One row of optical.csv. */
+    static String opticalLine(OpticalPass.Row r) {
+        return String.format(Locale.ROOT, "%s,%s,%s,%.3f,%.3f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f",
+                r.field(), r.date(), r.scene(), r.clear(), r.bare(), r.ndvi(), r.ndti(),
+                r.blue(), r.green(), r.red(), r.nir(), r.swir16(), r.swir22());
     }
 
     private static void writeRadar(Path file, List<RadarPass.Row> rows) throws IOException {

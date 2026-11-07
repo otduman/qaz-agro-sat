@@ -100,7 +100,7 @@ final class OpticalPass {
         List<Row> rows = new ArrayList<>();
         LocalDate date = dateOf(scene);
         for (Field field : fields) {
-            Row row = measureField(field, scene, date, factor, maskWindow.width(), bandWindow.width(), clear, classes,
+            Row row = measureField(field, scene.id(), date, factor, maskWindow.width(), bandWindow.width(), clear, classes,
                     red, green, blue, nir, swir16, swir22);
             rows.add(row);
             if (row.clear() >= PHOTO_MIN_CLEAR && !date.isBefore(season.chartFrom()) && !date.isAfter(season.photosTo())) {
@@ -110,8 +110,9 @@ final class OpticalPass {
         return rows;
     }
 
-    private static Row measureField(
-            Field field, StacItem scene, LocalDate date, int factor, int maskWidth, int bandWidth,
+    /** Also used by {@link StackCheck} on arrays read back from a season stack. */
+    static Row measureField(
+            Field field, String sceneId, LocalDate date, int factor, int maskWidth, int bandWidth,
             boolean[] clear, int[] classes, float[] red, float[] green, float[] blue, float[] nir,
             float[] swir16, float[] swir22) {
         int maskLeft = field.left() / factor;
@@ -159,7 +160,7 @@ final class OpticalPass {
                 }
             }
         }
-        return new Row(field.name(), date, scene.id(),
+        return new Row(field.name(), date, sceneId,
                 (double) clearCount / maskPixels,
                 clearCount == 0 ? Double.NaN : (double) bareCount / clearCount,
                 Study.median(ndvi, bandCount),
