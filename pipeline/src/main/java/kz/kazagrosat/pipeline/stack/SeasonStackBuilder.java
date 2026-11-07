@@ -2,6 +2,8 @@ package kz.kazagrosat.pipeline.stack;
 
 import java.io.IOException;
 import java.net.URI;
+import java.nio.file.AccessDeniedException;
+import java.nio.file.FileSystemException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -16,6 +18,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
@@ -91,6 +94,9 @@ public final class SeasonStackBuilder {
         if (todo.isEmpty()) {
             return new StackReport(season.tile(), season.scenes().size(), alreadyStored, 0, 0, List.of());
         }
+        // Fails here, before any download, if another program holds the index open.
+        Files.createDirectories(folder);
+        writeIndex(indexFile, finished);
 
         StackArea stackArea = existing.isPresent() ? existing.get() : locate(area, year, season.tile(), todo.getFirst());
         stackArea.write(folder);
@@ -103,23 +109,22 @@ public final class SeasonStackBuilder {
                                  int alreadyStored) throws IOException, InterruptedException {
         Object indexLock = new Object();
         AtomicInteger done = new AtomicInteger();
+        AtomicBoolean indexBroken = new AtomicBoolean();
         List<String> failures = new ArrayList<>();
         ExecutorService pool = Executors.newFixedThreadPool(threads);
         try {
             List<Future<StackEntry>> results = new ArrayList<>();
             for (StacItem scene : todo) {
                 results.add(pool.submit(() -> {
+                    if (indexBroken.get()) {
+                        return null;
+                    }
                     LocalDate date = SeasonScenes.dateOf(scene);
+                    StackEntry entry;
                     try {
-                        StackEntry entry = storeDate(scene, stackArea, area, folder);
-                        synchronized (indexLock) {
-                            finished.add(entry);
-                            StackIndex.write(indexFile, finished);
-                        }
-                        progress.accept(describe(entry) + " (" + done.incrementAndGet() + " of " + todo.size() + ")");
-                        return entry;
+                        entry = storeDate(scene, stackArea, area, folder);
                     } catch (IOException | RuntimeException e) {
-                        String reason = Objects.requireNonNullElse(e.getMessage(), e.getClass().getSimpleName());
+                        String reason = reason(e);
                         progress.accept(date + ": failed: " + reason + " (" + done.incrementAndGet()
                                 + " of " + todo.size() + ")");
                         synchronized (failures) {
@@ -127,6 +132,21 @@ public final class SeasonStackBuilder {
                         }
                         return null;
                     }
+                    // A date counts as finished only once the index on disk says so. If the index can't
+                    // be written, every further download would be wasted, so the whole run stops.
+                    synchronized (indexLock) {
+                        List<StackEntry> next = new ArrayList<>(finished);
+                        next.add(entry);
+                        try {
+                            writeIndex(indexFile, next);
+                        } catch (IOException e) {
+                            indexBroken.set(true);
+                            throw e;
+                        }
+                        finished.add(entry);
+                    }
+                    progress.accept(describe(entry) + " (" + done.incrementAndGet() + " of " + todo.size() + ")");
+                    return entry;
                 }));
             }
             int stored = 0;
@@ -142,8 +162,12 @@ public final class SeasonStackBuilder {
             List<String> sorted = failures.stream().sorted().toList();
             return new StackReport(season.tile(), season.scenes().size(), alreadyStored, stored, cloudy, sorted);
         } catch (ExecutionException e) {
+            pool.shutdownNow();
             if (e.getCause() instanceof InterruptedException interrupted) {
                 throw interrupted;
+            }
+            if (e.getCause() instanceof IOException indexFailure) {
+                throw indexFailure;
             }
             throw new IOException("A download task broke unexpectedly", e.getCause());
         } catch (InterruptedException e) {
@@ -228,6 +252,28 @@ public final class SeasonStackBuilder {
         Path temporary = dateFolder.resolve(layer.fileName() + ".part");
         TiledTiffWriter.write(temporary, values, grid, layer.bits(), nodata);
         Files.move(temporary, file, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+    }
+
+    /** Rewrites the index, explaining the usual cause when Windows refuses: another program has it open. */
+    private static void writeIndex(Path indexFile, List<StackEntry> entries) throws IOException {
+        try {
+            StackIndex.write(indexFile, entries);
+        } catch (AccessDeniedException e) {
+            throw new IOException("Cannot update " + indexFile + ": it is open in another program, such as Excel."
+                    + " Close it and run the same command again.", e);
+        }
+    }
+
+    /** One line saying why a date failed. File-system errors otherwise give only a bare file name. */
+    private static String reason(Exception e) {
+        if (e instanceof AccessDeniedException denied) {
+            String file = denied.getOtherFile() != null ? denied.getOtherFile() : denied.getFile();
+            return "cannot replace " + file + ": it is open in another program, such as QGIS";
+        }
+        if (e instanceof FileSystemException fileProblem) {
+            return e.getClass().getSimpleName() + ": " + fileProblem.getMessage();
+        }
+        return Objects.requireNonNullElse(e.getMessage(), e.getClass().getSimpleName());
     }
 
     private CogReader open(StacAsset asset) throws IOException, InterruptedException {

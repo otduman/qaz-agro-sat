@@ -4,7 +4,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -12,6 +14,7 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
 import kz.kazagrosat.core.geo.BoundingBox;
@@ -36,6 +39,7 @@ class SeasonStackBuilderTest {
     private static final RetryPolicy RETRY = new RetryPolicy(2, Duration.ofMillis(1));
     private static final LocalDate JULY = LocalDate.of(2025, 7, 12);
     private static final LocalDate AUGUST = LocalDate.of(2025, 8, 3);
+    private static final boolean WINDOWS = System.getProperty("os.name").startsWith("Windows");
 
     @TempDir
     Path folder;
@@ -199,6 +203,81 @@ class SeasonStackBuilderTest {
         assertEquals(1, report.failures().size());
         assertTrue(report.failures().getFirst().contains("scaling"), report.failures().toString());
         assertEquals(List.of(JULY), SeasonStack.open(folder).entries().stream().map(StackEntry::date).toList());
+    }
+
+    /** Holding a file open the way Excel does: on Windows nothing can rename another file over it. */
+    private static FileInputStream lock(Path file) throws IOException {
+        return new FileInputStream(file.toFile());
+    }
+
+    @Test
+    void stopsBeforeDownloadingWhenTheIndexIsLocked() throws Exception {
+        assumeTrue(WINDOWS, "only Windows blocks replacing a file another program holds open");
+        fake.scene("2025-07-12", 3);
+        build(2025);
+        fake.scene("2025-08-03", 7);
+        int requestsBefore = fake.server().requests().size();
+
+        try (FileInputStream excel = lock(folder.resolve("index.csv"))) {
+            IOException error = assertThrows(IOException.class, () -> build(2025));
+
+            assertTrue(error.getMessage().contains("index.csv"), error.getMessage());
+            assertTrue(error.getMessage().contains("open in another program"), error.getMessage());
+        }
+        List<TestHttpServer.Recorded> later = fake.server().requests()
+                .subList(requestsBefore, fake.server().requests().size());
+        assertTrue(later.stream().noneMatch(r -> r.path().endsWith(".tif")), "downloaded anyway: " + later);
+
+        assertEquals(1, build(2025).stored(), "a rerun after closing the file finishes the season");
+    }
+
+    @Test
+    void abortsWhenTheIndexCannotBeUpdatedMidRun() throws Exception {
+        assumeTrue(WINDOWS, "only Windows blocks replacing a file another program holds open");
+        fake.scene("2025-07-12", 3).scene("2025-08-03", 7).scene("2025-09-01", 9);
+        AtomicReference<FileInputStream> excel = new AtomicReference<>();
+        Consumer<String> opensTheIndexAfterTheFirstDate = message -> {
+            if (message.startsWith("2025-07-12: stored")) {
+                try {
+                    excel.set(lock(folder.resolve("index.csv")));
+                } catch (IOException e) {
+                    throw new IllegalStateException(e);
+                }
+            }
+        };
+
+        try {
+            IOException error = assertThrows(IOException.class, () -> new SeasonStackBuilder(
+                    fake.stacUri(), RETRY, 1, opensTheIndexAfterTheFirstDate).build(AREA, 2025, folder));
+            assertTrue(error.getMessage().contains("open in another program"), error.getMessage());
+            assertTrue(fake.server().requests().stream().noneMatch(r -> r.path().startsWith("/20250901/")),
+                    "kept downloading after the index broke");
+        } finally {
+            excel.get().close();
+        }
+        assertEquals(List.of(JULY), SeasonStack.open(folder).entries().stream().map(StackEntry::date).toList());
+
+        StackReport rerun = build(2025);
+        assertEquals(2, rerun.stored());
+        assertEquals(3, SeasonStack.open(folder).entries().size());
+    }
+
+    @Test
+    void explainsALockedLayerFile() throws Exception {
+        assumeTrue(WINDOWS, "only Windows blocks replacing a file another program holds open");
+        fake.scene("2025-07-12", 3);
+        Path red = SeasonStack.layerFile(folder, JULY, Layer.RED);
+        Files.createDirectories(red.getParent());
+        Files.write(red, new byte[] {1, 2, 3});
+
+        StackReport report;
+        try (FileInputStream qgis = lock(red)) {
+            report = build(2025);
+        }
+
+        assertEquals(1, report.failures().size());
+        assertTrue(report.failures().getFirst().contains("red.tif"), report.failures().toString());
+        assertTrue(report.failures().getFirst().contains("open in another program"), report.failures().toString());
     }
 
     @Test

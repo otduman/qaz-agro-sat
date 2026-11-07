@@ -2,10 +2,10 @@ package kz.kazagrosat.pipeline.cog;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -42,12 +42,17 @@ class FileByteSourceTest {
         assertEquals(0, new FileByteSource(file).read(200, 10).length);
     }
 
+    /**
+     * A rerun replaces a stored file by renaming a new one over it. On Windows that fails while any
+     * handle is still open; plain deletion would not catch a leak, because Java's handles allow it.
+     */
     @Test
-    void leavesTheFileFreeToDeleteAfterReading() throws Exception {
-        FileByteSource source = new FileByteSource(file);
-        source.read(0, 50);
+    void aRerunCanReplaceTheFileAfterReading() throws Exception {
+        new FileByteSource(file).read(0, 50);
 
-        Files.delete(file);
-        assertFalse(Files.exists(file));
+        Path replacement = Files.write(folder.resolve("bytes.bin.part"), new byte[] {7, 7, 7});
+        Files.move(replacement, file, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+
+        assertArrayEquals(new byte[] {7, 7, 7}, Files.readAllBytes(file));
     }
 }
