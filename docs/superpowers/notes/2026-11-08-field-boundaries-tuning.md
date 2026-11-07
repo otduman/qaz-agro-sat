@@ -58,3 +58,34 @@ values to my eye rather than to the ground. Final values, used unchanged on 2024
 | minRegionHectares | 5.0 | waterMedian | 0.05 |
 | maxHoleHectares | 1.0 | uniformitySpread | 0.25 |
 | simplifyMetres | 10.0 | | |
+
+## Results on all three seasons (frozen values)
+
+Each run used `java -Xmx1g`, so it stayed under 1 GB of memory.
+
+| season | dates used (cloudy skipped) | run time | regions | field | fallow | other | left out |
+|---|---|---|---|---|---|---|---|
+| 2025, tuned on | 50 (2) | 72 s | 685 | 316, 24,047 ha | 11, 663 ha | 358, 15,382 ha | 348.5 ha, all regions under 5 ha |
+| 2024 | 46 (4) | 75 s | 518 | 280, 25,748 ha | 12, 1,401 ha | 226, 12,882 ha | 410.7 ha, all regions under 5 ha |
+| 2023 | 47 (2) | 78 s | 433 | 214, 26,001 ha | 36, 2,644 ha | 183, 11,457 ha | 338.9 ha, all regions under 5 ha |
+
+No pixel in any season had too few clear dates. Regions labelled other for having no clear spring
+date: 7 in 2025, 3 in 2024, none in 2023.
+
+Box check, against the experiment's own photo readings (a consistency check, not ground truth):
+
+| season | agree | boxes that disagree |
+|---|---|---|
+| 2025, seen while tuning | 27 of 34 | F02, F07, F08, F09, B18 crossed though read as one field; B13 not crossed though read as two; D02 a lake in pieces |
+| 2024 | 27 of 34 | F02, F07, F09, B02, B10, D01 crossed though read as one field; B19 not crossed though read as two |
+| 2023 | 33 of 34 | F07 crossed (largest region 85%) though read as one field |
+
+Stability, the share of one season's boundary pixels within 20 m of the other season's, with the
+share a random line would get:
+
+| from -> to | share | chance |
+|---|---|---|
+| 2025 -> 2024 | 60.4% | 13.9% |
+| 2024 -> 2025 | 70.2% | 16.2% |
+| 2025 -> 2023 | 51.7% | 11.9% |
+| 2023 -> 2025 | 69.3% | 16.2% |
