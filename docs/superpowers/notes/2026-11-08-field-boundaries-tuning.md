@@ -29,3 +29,10 @@ unchanged and are reported as they come out. Each round below changed `FieldPara
   no drop of 0.25 by 30 September (1,507 ha; by eye at least one clearly harvested field).
 - Unit-test fixture `aFaintStripAcrossAFieldIsMergedBack` now takes its strip depth halfway between
   markerEdge and ridgeWeak, instead of the hard-coded 0.06 that sat between the old values.
+
+## Round 2: dropBy 0.25 -> 0.2
+
+- Why: 16 regions (856 ha) labelled other dropped between 0.20 and 0.25 after their peak; the largest,
+  by eye, is a harvested field with combine lines in September.
+- Result: 685 regions (316 field 24,047 ha; 11 fallow 663 ha; 358 other 15,382 ha); 348.5 ha left
+  out as regions under 5 ha; no pixel without clear data. Box check unchanged, 27 of 34.
