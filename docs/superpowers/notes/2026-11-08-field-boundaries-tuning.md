@@ -36,3 +36,25 @@ unchanged and are reported as they come out. Each round below changed `FieldPara
   by eye, is a harvested field with combine lines in September.
 - Result: 685 regions (316 field 24,047 ha; 11 fallow 663 ha; 358 other 15,382 ha); 348.5 ha left
   out as regions under 5 ha; no pixel without clear data. Box check unchanged, 27 of 34.
+
+## Frozen
+
+Stopped after round 2. The rest of "other" is mostly land green already in spring, which the rule
+means to leave out; the doubtful cases there (weedy fallow against steppe, winter crops or hay
+against pasture) can't be told apart by the NDVI curve alone, so more rounds would fit the
+values to my eye rather than to the ground. Final values, used unchanged on 2024 and 2023:
+
+| name | value | name | value |
+|---|---|---|---|
+| brightnessWeight | 5.0 | minLabelDates | 5 |
+| edgeRank | 3 | springEnd | 06-15 |
+| markerEdge | 0.15 | springBare | 0.3 |
+| markerShrink | 2 | peakGreen | 0.5 |
+| minMarkerPixels | 50 | peakFrom | 06-20 |
+| ridgeWeak | 0.2 | dropBy | 0.2 |
+| curveTolerance | 0.05 | dropUntil | 09-30 |
+| minCommonDates | 5 | fallowBare | 0.3 |
+| minClearShare | 0.6 | fallowShare | 0.7 |
+| minRegionHectares | 5.0 | waterMedian | 0.05 |
+| maxHoleHectares | 1.0 | uniformitySpread | 0.25 |
+| simplifyMetres | 10.0 | | |
