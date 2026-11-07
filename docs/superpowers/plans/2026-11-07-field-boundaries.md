@@ -101,7 +101,7 @@ The spec leaves these open. Each is the plan's call, and the owner sees the list
 | `fallowShare` | 0.7 | |
 | `waterMedian` | 0.05 | |
 | `uniformitySpread` | 0.25 | |
-| `simplifyMetres` | 5.0 | |
+| `simplifyMetres` | 10.0 | was 5.0; see the Task 5 ruling |
 
 ## Review Focus
 

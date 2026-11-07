@@ -54,4 +54,25 @@ class UtmProjectionTest {
     void rejectsCodesThatAreNotNorthernUtmZones(int epsg) {
         assertThrows(IllegalArgumentException.class, () -> UtmProjection.forEpsg(epsg));
     }
+
+    @Test
+    void unprojectUndoesProject() {
+        UtmProjection utm = UtmProjection.forEpsg(32641);
+        UtmPoint point = utm.project(62.55, 53.54);
+
+        LonLat back = utm.unproject(point.easting(), point.northing());
+
+        assertEquals(62.55, back.longitude(), 1e-9);
+        assertEquals(53.54, back.latitude(), 1e-9);
+    }
+
+    @Test
+    void unprojectsTheTestAreaCorner() {
+        // The test area's 10 m grid origin, 460140 E 5942540 N in zone 41N, lies a few hundred metres
+        // from 62.40 E 53.63 N, the area's north-west corner.
+        LonLat corner = UtmProjection.forEpsg(32641).unproject(460140, 5942540);
+
+        assertEquals(62.40, corner.longitude(), 0.005);
+        assertEquals(53.63, corner.latitude(), 0.005);
+    }
 }

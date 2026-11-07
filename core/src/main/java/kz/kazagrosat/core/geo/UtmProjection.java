@@ -6,7 +6,7 @@ import org.locationtech.proj4j.CoordinateTransform;
 import org.locationtech.proj4j.CoordinateTransformFactory;
 import org.locationtech.proj4j.ProjCoordinate;
 
-/** Converts WGS84 lon/lat to a northern-hemisphere UTM zone, the grids Sentinel-2 uses over Kazakhstan. */
+/** Converts between WGS84 lon/lat and a northern-hemisphere UTM zone, the grids Sentinel-2 uses over Kazakhstan. */
 public final class UtmProjection {
 
     private static final int FIRST_NORTH_EPSG = 32601;
@@ -16,6 +16,7 @@ public final class UtmProjection {
     private static final int SEGMENTS_PER_SIDE = 32;
 
     private final CoordinateTransform transform;
+    private final CoordinateTransform inverse;
 
     private UtmProjection(int zone) {
         CRSFactory factory = new CRSFactory();
@@ -23,7 +24,9 @@ public final class UtmProjection {
                 factory.createFromParameters("WGS84", "+proj=longlat +datum=WGS84 +no_defs");
         CoordinateReferenceSystem utm = factory.createFromParameters(
                 "UTM" + zone, "+proj=utm +zone=" + zone + " +datum=WGS84 +units=m +no_defs");
-        this.transform = new CoordinateTransformFactory().createTransform(wgs84, utm);
+        CoordinateTransformFactory transforms = new CoordinateTransformFactory();
+        this.transform = transforms.createTransform(wgs84, utm);
+        this.inverse = transforms.createTransform(utm, wgs84);
     }
 
     public static UtmProjection forEpsg(int epsg) {
@@ -31,6 +34,13 @@ public final class UtmProjection {
             throw new IllegalArgumentException("Not a northern UTM zone: EPSG:" + epsg);
         }
         return new UtmProjection(epsg - FIRST_NORTH_EPSG + 1);
+    }
+
+    /** The WGS84 position of a point given in this zone's UTM metres. */
+    public LonLat unproject(double easting, double northing) {
+        ProjCoordinate lonLat = new ProjCoordinate();
+        inverse.transform(new ProjCoordinate(easting, northing), lonLat);
+        return new LonLat(lonLat.x, lonLat.y);
     }
 
     public UtmPoint project(double longitude, double latitude) {

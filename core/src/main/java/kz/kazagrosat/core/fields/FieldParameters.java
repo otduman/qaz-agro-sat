@@ -28,7 +28,9 @@ import java.time.MonthDay;
  * @param fallowShare       fallow is bare on at least this share of its dates
  * @param waterMedian       a median NDVI under this is water or salt
  * @param uniformitySpread  the NDVI spread at which the uniformity score reaches 0
- * @param simplifyMetres    tolerance for smoothing outlines
+ * @param simplifyMetres    tolerance for smoothing outlines. JTS squares it into the largest corner
+ *                          triangle it removes, so smoothing a one-pixel staircase step (a triangle of
+ *                          half a pixel squared) needs more than 0.71 pixel
  */
 public record FieldParameters(
         double brightnessWeight,
@@ -58,7 +60,7 @@ public record FieldParameters(
     public static final FieldParameters DEFAULTS = new FieldParameters(
             5.0, 3, 0.05, 3, 50, 0.08, 0.05, 5, 0.6, 5.0, 1.0, 5,
             MonthDay.of(6, 15), 0.3, 0.5, MonthDay.of(6, 20), 0.25, MonthDay.of(9, 30),
-            0.3, 0.7, 0.05, 0.25, 5.0);
+            0.3, 0.7, 0.05, 0.25, 10.0);
 
     public FieldParameters {
         if (edgeRank < 1) {
