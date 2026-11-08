@@ -6,6 +6,8 @@ public final class SclMask {
     private static final int VEGETATION = 4;
     private static final int BARE_SOIL = 5;
     private static final int WATER = 6;
+    /** The class the mask gives snow and ice. */
+    public static final int SNOW = 11;
 
     private SclMask() {}
 

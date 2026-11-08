@@ -53,17 +53,35 @@ public final class StackImages implements SeasonImages {
         boolean[] usable = cloudMask(stack.raw(date, Layer.SCL), maskGrid, grid);
         boolean[] snow = SnowTest.snow(green, nir, swir16);
 
+        float[] brightness = brightness(blue, green, red);
+        return new DateImage(date, Ndvi.compute(red, nir), brightness, clear(usable, snow, brightness, nir));
+    }
+
+    /** The mean of blue, green and red. */
+    public static float[] brightness(float[] blue, float[] green, float[] red) {
         float[] brightness = new float[red.length];
-        boolean[] clear = new boolean[red.length];
         for (int i = 0; i < red.length; i++) {
             brightness[i] = (blue[i] + green[i] + red[i]) / 3f;
+        }
+        return brightness;
+    }
+
+    /** Clear where the cloud mask allows it, there is no snow, and brightness and nir have a value. */
+    public static boolean[] clear(boolean[] usable, boolean[] snow, float[] brightness, float[] nir) {
+        boolean[] clear = new boolean[usable.length];
+        for (int i = 0; i < usable.length; i++) {
             clear[i] = usable[i] && !snow[i] && !Float.isNaN(brightness[i]) && !Float.isNaN(nir[i]);
         }
-        return new DateImage(date, Ndvi.compute(red, nir), brightness, clear);
+        return clear;
     }
 
     /** The cloud mask's usable flags on the 10 m grid. Both grids share their top-left corner. */
     public static boolean[] cloudMask(int[] classes, PixelGrid maskGrid, PixelGrid grid) throws IOException {
+        return SclMask.usable(classesOnBandGrid(classes, maskGrid, grid));
+    }
+
+    /** The cloud mask's classes repeated onto the 10 m grid. Both grids share their top-left corner. */
+    public static int[] classesOnBandGrid(int[] classes, PixelGrid maskGrid, PixelGrid grid) throws IOException {
         int factor = factor(maskGrid, grid);
         int[] upsampled = SclMask.upsample(classes, maskGrid.width(), maskGrid.height(), factor);
         int upWidth = maskGrid.width() * factor;
@@ -71,7 +89,7 @@ public final class StackImages implements SeasonImages {
         for (int y = 0; y < grid.height(); y++) {
             System.arraycopy(upsampled, y * upWidth, window, y * grid.width(), grid.width());
         }
-        return SclMask.usable(window);
+        return window;
     }
 
     /** Values on the 20 m grid repeated onto the 10 m grid. Both grids share their top-left corner. */

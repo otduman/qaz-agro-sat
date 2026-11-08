@@ -15,8 +15,15 @@ public final class Percentiles {
      *     NaN when there are none
      */
     public static double of(float[] values, int[] pixels, boolean[] use, double share) {
-        if (!(share >= 0 && share <= 1)) {
-            throw new IllegalArgumentException("The share must be from 0 to 1 but was " + share);
+        return of(values, pixels, use, new double[] {share})[0];
+    }
+
+    /** As {@link #of(float[], int[], boolean[], double)} for several shares, sorting only once. */
+    public static double[] of(float[] values, int[] pixels, boolean[] use, double[] shares) {
+        for (double share : shares) {
+            if (!(share >= 0 && share <= 1)) {
+                throw new IllegalArgumentException("The share must be from 0 to 1 but was " + share);
+            }
         }
         float[] kept = new float[pixels.length];
         int n = 0;
@@ -25,14 +32,19 @@ public final class Percentiles {
                 kept[n++] = values[i];
             }
         }
+        double[] result = new double[shares.length];
         if (n == 0) {
-            return Double.NaN;
+            Arrays.fill(result, Double.NaN);
+            return result;
         }
         Arrays.sort(kept, 0, n);
-        double position = share * (n - 1);
-        int below = (int) Math.floor(position);
-        int above = Math.min(n - 1, below + 1);
-        double fraction = position - below;
-        return kept[below] + fraction * ((double) kept[above] - kept[below]);
+        for (int k = 0; k < shares.length; k++) {
+            double position = shares[k] * (n - 1);
+            int below = (int) Math.floor(position);
+            int above = Math.min(n - 1, below + 1);
+            double fraction = position - below;
+            result[k] = kept[below] + fraction * ((double) kept[above] - kept[below]);
+        }
+        return result;
     }
 }

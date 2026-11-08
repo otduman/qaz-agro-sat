@@ -48,4 +48,15 @@ class PercentilesTest {
         assertThrows(IllegalArgumentException.class, () -> Percentiles.of(VALUES, ALL, null, 1.5));
         assertThrows(IllegalArgumentException.class, () -> Percentiles.of(VALUES, ALL, null, -0.1));
     }
+
+    @Test
+    void severalSharesAtOnceMatchOneAtATime() {
+        double[] all = Percentiles.of(VALUES, ALL, null, new double[] {0.25, 0.5, 0.75});
+
+        assertEquals(3, all.length);
+        assertEquals(2.0, all[0], 1e-12);
+        assertEquals(3.0, all[1], 1e-12);
+        assertEquals(4.0, all[2], 1e-12);
+        assertTrue(Double.isNaN(Percentiles.of(VALUES, new int[0], null, new double[] {0.5})[0]));
+    }
 }
