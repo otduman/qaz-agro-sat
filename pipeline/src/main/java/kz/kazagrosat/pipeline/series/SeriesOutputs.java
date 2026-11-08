@@ -44,7 +44,7 @@ public final class SeriesOutputs {
                             r.b12(), r.ndti(), r.nir(), r.brightness(), r.blue(), r.snowShare(), r.roughness(),
                             r.lineStrength(), r.lineDirection()}) {
                         out.write(',');
-                        out.write(Double.isNaN(v) ? "" : String.format(Locale.ROOT, "%.4f", v));
+                        out.write(Double.isNaN(v) ? "" : decimals(v));
                     }
                     out.write('\n');
                 }
@@ -63,6 +63,12 @@ public final class SeriesOutputs {
             Files.writeString(swap.part("summary-" + year + ".txt"), summary(series), StandardCharsets.UTF_8);
             return swap.commit();
         }
+    }
+
+    /** Four decimals, with a value that rounds to zero written as 0.0000, never -0.0000. */
+    static String decimals(double value) {
+        String text = String.format(Locale.ROOT, "%.4f", value);
+        return text.equals("-0.0000") ? "0.0000" : text;
     }
 
     private static String degrees(double value) {
