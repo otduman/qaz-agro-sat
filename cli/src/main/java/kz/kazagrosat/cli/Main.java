@@ -28,6 +28,10 @@ import kz.kazagrosat.pipeline.NdviPipeline;
 import kz.kazagrosat.pipeline.NdviResult;
 import kz.kazagrosat.pipeline.fields.FieldOutputs;
 import kz.kazagrosat.pipeline.fields.StackImages;
+import kz.kazagrosat.pipeline.series.Series;
+import kz.kazagrosat.pipeline.series.SeriesBuilder;
+import kz.kazagrosat.pipeline.series.SeriesField;
+import kz.kazagrosat.pipeline.series.SeriesOutputs;
 import kz.kazagrosat.pipeline.http.RetryPolicy;
 import kz.kazagrosat.pipeline.stac.SceneSelector;
 import kz.kazagrosat.pipeline.stac.StacClient;
@@ -43,7 +47,7 @@ import kz.kazagrosat.pipeline.stack.StackReport;
 public final class Main {
 
     private static final String USAGE = """
-            KazAgroSat: Sentinel-2 maps, season stacks and field boundaries for a small area
+            KazAgroSat: Sentinel-2 maps, season stacks, field boundaries and field series for a small area
 
             Usage:
               scenes --bbox W,S,E,N --from YYYY-MM-DD --to YYYY-MM-DD [--max-cloud PERCENT]
@@ -59,6 +63,11 @@ public final class Main {
               fields --stack FOLDER --out FOLDER
                   Finds the season's fields from a stack made by the season command and
                   writes them as GeoJSON, a label GeoTIFF, outline pictures and a summary.
+
+              series --stack FOLDER --fields FOLDER --out FOLDER
+                  Reads every field the fields command found on every date of the same
+                  stack, and writes one row per field and date as CSV, with a field list
+                  and a summary.
 
             The scenes, ndvi and season commands accept --stac-url URL to use a
             different STAC API.
@@ -145,6 +154,13 @@ public final class Main {
                 Path stack = Path.of(require(options, "--stack"));
                 Path folder = Path.of(require(options, "--out"));
                 yield (out, err) -> fields(stack, folder, out, err);
+            }
+            case "series" -> {
+                allowOnly(options, Set.of("--stack", "--fields", "--out"));
+                Path stack = Path.of(require(options, "--stack"));
+                Path fields = Path.of(require(options, "--fields"));
+                Path folder = Path.of(require(options, "--out"));
+                yield (out, err) -> series(stack, fields, folder, out, err);
             }
             default -> throw new IllegalArgumentException("Unknown command: " + args[0]);
         };
@@ -272,6 +288,26 @@ public final class Main {
         double noData = map.summary().noDataPixels() * hectaresPerPixel;
         out.println(text("Left out: %,.1f ha (dropped under %.0f ha %,.1f, no clear data %,.1f)",
                 dropped + noData, FieldParameters.DEFAULTS.minRegionHectares(), dropped, noData));
+        for (int i = 0; i < written.size(); i++) {
+            out.println((i == 0 ? "Wrote:   " : "         ") + written.get(i));
+        }
+        return 0;
+    }
+
+    private static int series(Path stackFolder, Path fieldsFolder, Path folder, PrintStream out, PrintStream err)
+            throws IOException, InterruptedException {
+        Series series = SeriesBuilder.build(SeasonStack.open(stackFolder), fieldsFolder, err::println);
+        List<Path> written = SeriesOutputs.write(series, folder);
+
+        List<SeriesField> inSeries = series.fields().stream().filter(SeriesField::inSeries).toList();
+        long fields = inSeries.stream().filter(f -> f.land() == LandLabel.FIELD).count();
+        long noInterior = inSeries.stream().filter(f -> f.interiorPixels() == 0).count();
+        long blank = series.rows().stream().filter(r -> !r.hasValues()).count();
+        out.println(text("Season:  %d, %d dates", series.year(), series.dates().size()));
+        out.println(text("Fields:  %d in the series (%d field, %d fallow), %d other listed only, "
+                + "%d with nothing left after the %.0f m shrink", inSeries.size(), fields, inSeries.size() - fields,
+                series.fields().size() - inSeries.size(), noInterior, SeriesBuilder.INTERIOR_METRES));
+        out.println(text("Rows:    %d, %d with blank values", series.rows().size(), blank));
         for (int i = 0; i < written.size(); i++) {
             out.println((i == 0 ? "Wrote:   " : "         ") + written.get(i));
         }
