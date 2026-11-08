@@ -2,6 +2,7 @@ package kz.kazagrosat.pipeline.fields;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.Map;
@@ -149,5 +150,30 @@ class RegionOutlinesTest {
         Polygon simplified = RegionOutlines.simplify(traced, FieldParameters.DEFAULTS.simplifyMetres()).get(1);
 
         assertArrayEquals(traced.get(1).getCoordinates(), simplified.getCoordinates());
+    }
+
+    /** Where three regions meet, every one of them has a vertex, so the outlines form a proper coverage. */
+    @Test
+    void aJunctionOfThreeRegionsIsAVertexOfEach() {
+        PixelGrid grid = grid(4, 4);
+        Map<Integer, Polygon> traced = RegionOutlines.trace(labels(4, "1122", "1122", "1133", "1133"), grid);
+        Coordinate junction = new Coordinate(grid.originX() + 20, grid.originY() - 20);
+
+        for (int region = 1; region <= 3; region++) {
+            assertTrue(java.util.Arrays.asList(traced.get(region).getCoordinates()).contains(junction),
+                    "region " + region);
+        }
+        Geometry[] coverage = traced.values().toArray(Geometry[]::new);
+        assertTrue(org.locationtech.jts.coverage.CoverageValidator.isValid(coverage));
+        Geometry[] simplified = RegionOutlines.simplify(traced, 10).values().toArray(Geometry[]::new);
+        assertTrue(org.locationtech.jts.coverage.CoverageValidator.isValid(simplified));
+    }
+
+    @Test
+    void aRegionInTwoPiecesTouchingOnlyAtACornerIsRefused() {
+        IllegalStateException refused = assertThrows(IllegalStateException.class,
+                () -> RegionOutlines.trace(labels(2, "1.", ".1"), grid(2, 2)));
+
+        assertTrue(refused.getMessage().contains("Region 1"), refused.getMessage());
     }
 }

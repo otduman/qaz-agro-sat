@@ -144,8 +144,14 @@ class FieldFinderTest {
         assertEquals(LandLabel.FIELD, region(map, 1).land());
     }
 
+    /**
+     * Pixel-to-pixel speckle under the calm level leaves each field whole. It doesn't break the calm middles
+     * up, so it doesn't exercise joining: white noise goes from all calm to no seed at all between amplitudes
+     * of about 0.1 and 0.16, unlike real fields, whose texture is patchy. Joining is covered by
+     * {@link #aFaintStripAcrossAFieldIsMergedBack}.
+     */
     @Test
-    void noiseInsideAFieldDoesNotSplitIt() throws Exception {
+    void speckleUnderTheCalmLevelDoesNotSplitAField() throws Exception {
         FieldMap map = find(new SyntheticSeason((x, y, d) ->
                 (x < 80 ? wheat(d) : FALLOW) + noise(x, y, d, 0.04)));
 
