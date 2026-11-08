@@ -72,13 +72,24 @@ Each run used `java -Xmx1g`, so it stayed under 1 GB of memory.
 No pixel in any season had too few clear dates. Regions labelled other for having no clear spring
 date: 7 in 2025, 3 in 2024, none in 2023.
 
-Box check, against the experiment's own photo readings (a consistency check, not ground truth):
+Box check, against the experiment's own photo readings (a consistency check, not ground truth). The
+pooled agreement flatters: most boxes are one field, so a map with no boundaries at all agrees with
+nearly all of them. The split by what the reading expects is the honest figure.
 
-| season | agree | boxes that disagree |
-|---|---|---|
-| 2025, seen while tuning | 27 of 34 | F02, F07, F08, F09, B18 crossed though read as one field; B13 not crossed though read as two; D02 a lake in pieces |
-| 2024 | 27 of 34 | F02, F07, F09, B02, B10, D01 crossed though read as one field; B19 not crossed though read as two |
-| 2023 | 33 of 34 | F07 crossed (largest region 85%) though read as one field |
+| season | two-field boxes crossed | one-field boxes not crossed | pooled | a map with no boundaries |
+|---|---|---|---|---|
+| 2025, seen while tuning | 3 of 4 | 24 of 30 | 27 of 34 | 30 of 34 |
+| 2024 | 6 of 7 | 21 of 27 | 27 of 34 | 27 of 34 |
+| 2023 | 7 of 7 | 26 of 27 | 33 of 34 | 27 of 34 |
+
+Boxes that disagree:
+- 2025: F02, F07, F08, F09, B18 crossed though read as one field; B13 not crossed though read as two;
+  D02 a lake in pieces.
+- 2024: F02, F07, F09, B02, B10, D01 crossed though read as one field; B19 not crossed though read as two.
+- 2023: F07 crossed (largest region 85%) though read as one field.
+
+(An earlier version of this table quoted only the pooled figure; the independent review pointed out
+that it needs the split and the no-boundary baseline beside it.)
 
 Stability, the share of one season's boundary pixels within 20 m of the other season's, with the
 share a random line would get:

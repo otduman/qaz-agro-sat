@@ -30,6 +30,7 @@ public final class FieldCheck {
 
     static final String TWO_FIELDS = "two fields in the box";
     static final String MIXED = "part natural part field";
+    static final String NO_READING = "no reading";
     static final int TUNED_ON = 2025;
     static final int[] YEARS = {2025, 2024, 2023};
     static final int TOLERANCE = 2;
@@ -102,33 +103,33 @@ public final class FieldCheck {
         System.out.println(season.year() + (season.year() == TUNED_ON ? " (seen while tuning)" : " (not seen while tuning)"));
         System.out.println(String.format(Locale.ROOT, "%-5s %-34s %8s %8s %8s %7s",
                 "Box", "Reading", "Largest", "Crossed", "Expected", "Agrees"));
-        int scored = 0;
-        int agree = 0;
-        int unscored = 0;
+        List<String> readings = new ArrayList<>();
+        List<Boolean> crossings = new ArrayList<>();
         for (Field box : season.boxes()) {
-            String reading = season.readings().getOrDefault(box.name(), "no reading");
+            String reading = season.readings().getOrDefault(box.name(), NO_READING);
             double share = BoxCrossing.largestShare(season.labels(), season.grid().width(), box);
             boolean crossed = share < BoxCrossing.CROSSED_BELOW;
-            String expected;
-            String agrees;
-            if (reading.equals(MIXED) || reading.equals("no reading")) {
-                expected = "-";
-                agrees = "-";
-                unscored++;
-            } else {
+            readings.add(reading);
+            crossings.add(crossed);
+            String expected = "-";
+            String agrees = "-";
+            if (BoxScore.isScored(reading)) {
                 boolean shouldCross = reading.equals(TWO_FIELDS);
                 expected = shouldCross ? "yes" : "no";
                 agrees = crossed == shouldCross ? "yes" : "NO";
-                scored++;
-                if (crossed == shouldCross) {
-                    agree++;
-                }
             }
             System.out.println(String.format(Locale.ROOT, "%-5s %-34s %8.2f %8s %8s %7s",
                     box.name(), reading, share, crossed ? "yes" : "no", expected, agrees));
         }
-        System.out.println(String.format(Locale.ROOT, "Agreement: %d of %d scored boxes; %d listed but not scored",
-                agree, scored, unscored));
+        BoxScore score = BoxScore.of(readings, crossings);
+        System.out.println(String.format(Locale.ROOT,
+                "Agreement: %d of %d scored boxes (two-field boxes crossed: %d of %d; one-field boxes not crossed:"
+                        + " %d of %d); %d listed but not scored",
+                score.agree(), score.scored(), score.twoFieldCrossed(), score.twoFieldBoxes(),
+                score.oneFieldNotCrossed(), score.oneFieldBoxes(), score.unscored()));
+        System.out.println(String.format(Locale.ROOT,
+                "Baseline: a map with no boundaries at all would agree on %d of %d", score.noBoundaryAgree(),
+                score.scored()));
     }
 
     private static void printStability(Season from, Season to) {

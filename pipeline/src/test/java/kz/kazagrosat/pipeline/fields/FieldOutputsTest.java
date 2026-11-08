@@ -137,6 +137,47 @@ class FieldOutputsTest {
         assertTrue(filesIn(out).stream().noneMatch(name -> name.endsWith(".part")), filesIn(out).toString());
     }
 
+    /** The same grid, but one region covering everything: outputs that differ from the strips'. */
+    private FieldMap oneRegion() {
+        int[] labels = new int[map.labels().length];
+        java.util.Arrays.fill(labels, 1);
+        return new FieldMap(map.grid(), labels, map.seasonEdges(),
+                List.of(new Region(1, labels.length, LandLabel.FIELD, 1.0)), map.summary());
+    }
+
+    @Test
+    @EnabledOnOs(OS.WINDOWS)
+    void aLockedFileLeavesEveryOutputAsItWas() throws Exception {
+        List<Path> written = FieldOutputs.write(stack, map, out);
+        List<byte[]> before = new ArrayList<>();
+        for (Path file : written) {
+            before.add(Files.readAllBytes(file));
+        }
+
+        try (FileInputStream held = new FileInputStream(out.resolve("fields-2025.tif").toFile())) {
+            assertThrows(IOException.class, () -> FieldOutputs.write(stack, oneRegion(), out));
+        }
+
+        for (int i = 0; i < written.size(); i++) {
+            assertArrayEquals(before.get(i), Files.readAllBytes(written.get(i)), written.get(i) + " changed");
+        }
+        assertTrue(filesIn(out).stream().noneMatch(name -> name.endsWith(".part") || name.endsWith(".old")),
+                filesIn(out).toString());
+    }
+
+    @Test
+    void aRerunRemovesOutlinePicturesOfOtherDates() throws Exception {
+        Files.createDirectories(out);
+        Path stale = Files.write(out.resolve("outlines-mid-season-2025-07-01.png"), new byte[] {1, 2, 3});
+        Path unrelated = Files.write(out.resolve("notes.txt"), new byte[] {4});
+
+        FieldOutputs.write(stack, map, out);
+
+        assertFalse(Files.exists(stale), "a picture from another run's date is removed");
+        assertTrue(Files.exists(out.resolve("outlines-mid-season-2025-07-10.png")));
+        assertTrue(Files.exists(unrelated), "files the command didn't make are left alone");
+    }
+
     @Test
     @EnabledOnOs(OS.WINDOWS)
     void explainsALockedOutputFile() throws Exception {
