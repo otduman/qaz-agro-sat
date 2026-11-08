@@ -49,7 +49,11 @@ public record StackArea(BoundingBox bbox, int year, String tile, PixelGrid grid,
                 + "tile=" + tile + "\n"
                 + "grid=" + formatGrid(grid) + "\n"
                 + "maskGrid=" + formatGrid(maskGrid) + "\n";
-        Files.writeString(folder.resolve(FILE), text, StandardCharsets.UTF_8);
+        // Written aside and renamed, so a run stopped halfway never leaves a half-written file.
+        Path part = folder.resolve(FILE + ".part");
+        Files.writeString(part, text, StandardCharsets.UTF_8);
+        Files.move(part, folder.resolve(FILE), java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                java.nio.file.StandardCopyOption.ATOMIC_MOVE);
     }
 
     /** True when a run asks for exactly this area and season. */
