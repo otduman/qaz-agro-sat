@@ -170,6 +170,34 @@ class FieldFinderTest {
     }
 
     @Test
+    void aFaintRoadBetweenTwoFieldsSplitsThem() throws Exception {
+        // A 1-pixel road in column 80, 0.1 lower in NDVI on every date: its edge (0.1) is under the calm level,
+        // so no single date or the season edge marks it. The right field is 0.08 lower on 3 dates: too little
+        // for an edge, but enough that the two curves don't match, so once split they stay split.
+        FieldMap map = find(new SyntheticSeason((x, y, d) -> {
+            if (x == 80) {
+                return wheat(d) - 0.1f;
+            }
+            boolean lower = x > 80 && (d == 3 || d == 6 || d == 9);
+            return lower ? wheat(d) - 0.08f : wheat(d);
+        }));
+
+        assertEquals(2, regionIds(map).size());
+        int left = label(map, 0, 0);
+        int right = label(map, WIDTH - 1, 0);
+        assertNotEquals(left, right);
+        for (int y = 0; y < HEIGHT; y++) {
+            for (int x = 0; x < WIDTH; x++) {
+                if (x <= 76) {
+                    assertEquals(left, label(map, x, y), "pixel " + x + "," + y);
+                } else if (x >= 84) {
+                    assertEquals(right, label(map, x, y), "pixel " + x + "," + y);
+                }
+            }
+        }
+    }
+
+    @Test
     void aFaintStripAcrossAFieldIsMergedBack() throws Exception {
         // A 3-row wet strip, lower on 3 dates by a step between the calm level and the weak-ridge limit: its
         // edges split the calm area in two, but the ridge is weak and the two halves have the same curve, so
@@ -191,7 +219,8 @@ class FieldFinderTest {
     private static FieldParameters withRidgeWeak(double ridgeWeak) {
         FieldParameters d = P;
         return new FieldParameters(d.brightnessWeight(), d.edgeRank(), d.markerEdge(), d.markerShrink(),
-                d.minMarkerPixels(), ridgeWeak, d.curveTolerance(), d.minCommonDates(), d.minClearShare(),
+                d.minMarkerPixels(), d.lineRadius(), d.lineEdge(), ridgeWeak, d.curveTolerance(),
+                d.minCommonDates(), d.minClearShare(),
                 d.minRegionHectares(), d.maxHoleHectares(), d.minLabelDates(), d.springEnd(), d.springBare(),
                 d.peakGreen(), d.peakFrom(), d.dropBy(), d.dropUntil(), d.fallowBare(), d.fallowShare(),
                 d.waterMedian(), d.uniformitySpread(), d.simplifyMetres());
