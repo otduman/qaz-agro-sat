@@ -9,7 +9,8 @@ package kz.kazagrosat.core.fields;
  * stops a short gap in a boundary line from joining two fields into one marker. Outside the image counts
  * as calm, so fields on the border keep their markers.
  *
- * <p>The flood is 4-connected and takes the lowest edge first; ties go first-in first-out, so the result
+ * <p>Every marker starts flooding at once, whatever the edge values inside it. The flood is 4-connected
+ * and takes the lowest edge first; ties go first-in first-out, so the result
  * depends only on the input. A pixel takes the label of the neighbour that reached it first. Pixels with
  * no edge value (NaN) get 0 and are never crossed, so pixels cut off by them also stay 0.
  */
@@ -32,7 +33,7 @@ public final class Watershed {
         BucketQueue queue = new BucketQueue(LEVELS + 1, pixels);
         for (int i = 0; i < pixels; i++) {
             if (labels[i] != 0) {
-                queue.push(level(edges[i]), i);
+                queue.push(0, i);
             }
         }
         int[] neighbours = new int[4];

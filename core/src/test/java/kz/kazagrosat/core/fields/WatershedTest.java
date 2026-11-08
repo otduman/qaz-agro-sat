@@ -174,4 +174,33 @@ class WatershedTest {
         assertEquals(2, labels[32 * width + 5]);
         assertTrue(Arrays.stream(labels).allMatch(label -> label == 1 || label == 2));
     }
+
+    /**
+     * The right field's middle is calm but busier than the left's, and a calm band runs along its side
+     * of the ridge, too close to the ridge to be part of any marker. The left flood can reach that band
+     * only through a gap in the ridge. Every marker floods from the start, so the band, which touches the
+     * right marker, is the right field's before the left flood gets through the gap.
+     */
+    @Test
+    void aHigherMarkerKeepsTheBandBesideIt() {
+        int width = 60;
+        int height = 20;
+        int ridge = 30;
+        float busyButCalm = (float) (P.markerEdge() - 0.01);
+        float[] edges = filled(width, height, 0f);
+        fill(edges, width, ridge + 1, 0, width - 1, height - 1, busyButCalm);
+        fill(edges, width, ridge + 1, 0, ridge + P.markerShrink(), height - 1, 0.02f);
+        fill(edges, width, ridge, 0, ridge, height - 1, 1.0f);
+        fill(edges, width, ridge, 8, ridge, 11, 0.10f);
+
+        int[] labels = Watershed.flood(edges, width, height, P);
+
+        int right = labels[width - 1];
+        assertNotEquals(labels[0], right);
+        for (int y = 0; y < height; y++) {
+            for (int x = ridge + 1; x <= ridge + P.markerShrink(); x++) {
+                assertEquals(right, labels[y * width + x], "band pixel " + x + "," + y);
+            }
+        }
+    }
 }
