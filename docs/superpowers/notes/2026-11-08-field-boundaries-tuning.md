@@ -127,7 +127,10 @@ late-October dates. The expectation was the opposite, so I looked at why:
 
 So the snow rule stays (it is standard and costs nothing), but the late-October problem is haze and
 partial snow, which no threshold here was tuned for. Step 3 records each field's blue reflectance and
-snow share per date so that step 4 can deal with them on evidence.
+snow share per date so that step 4 can deal with them on evidence. (Snow share counts the mask's own snow
+and the snow test only where the mask sees no cloud, since ice cloud passes the snow test too. Turbid
+floodwater can pass it as well: some small fields in May 2024, a flood spring, are flagged. See the step 3
+results notes.)
 
 **Reruns with both fixes**, each under `java -Xmx1g`:
 

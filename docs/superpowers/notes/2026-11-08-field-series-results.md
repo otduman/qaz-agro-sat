@@ -20,9 +20,18 @@ Rows equal fields times dates in every season. No field lost its whole interior 
 so every blank row is a field less than 60% clear on that date. 2023 was the clearest season, as the
 stack's clear shares already said.
 
-**Snow.** Rows with any snow in the field's interior, by the cloud mask's snow class or the snow test:
-1,099 in 2025, 839 in 2024 and 612 in 2023 (most of them a few pixels). Rows with at least 5% snow
-that still have values: 8 in 2025, all on 30 September, and 18 in 2023, all on 26 October; 9 in 2024.
+**Snow.** A row's snow share counts the interior pixels the cloud mask calls snow, plus those it calls clear
+ground where the snow test finds snow. (The first version also counted cloud that passes the snow test,
+since ice cloud does; the independent review caught it, and the series were rerun.) Rows with any snow,
+from each season's summary: 328 in 2025, 108 in 2024 and 161 in 2023. Rows with at least 5%:
+- **2025:** 236, all on 30 September. The photo shows real early snow over almost the whole area, with
+  the lakes still open. 8 of those rows still have values; their "clear" interiors are mostly what the
+  mask calls water, dark wet ground beside the snow (brightness 0.02 to 0.04), a trap for step 4.
+- **2023:** 62, all on 26 October; 17 still have values.
+- **2024:** 22, from 10 May to 15 October; 9 still have values. The clearest case,
+  2024-F0508 (8 ha, at the southern edge of the area), is flagged on 84% to 97% of its interior from
+  10 to 28 May, falling to 43% by 4 June and none after. Spring 2024 brought major floods to the Kostanay region, and turbid
+  floodwater can pass the snow test. I think these are flooded fields, not snow; I haven't checked on the ground.
 Those rows carry their snow share, so step 4 can drop or keep them on evidence.
 
 ## Box check
@@ -65,7 +74,8 @@ window and after it:
 - **2024:** rises in 6 of 8. F06 0.09 -> 0.17, C01 0.21 -> 0.50, B04 0.07 -> 0.25,
   B11 0.12 -> 0.25, B15 0.15 -> 0.28, B16 0.15 -> 0.43. The two falls, B01 and B05, have one date
   after the window.
-- **2023:** mixed. It rises for B11 (0.19 -> 0.53) and B17, and falls for F02, C01, B16 and D01.
+- **2023:** mixed. It rises for B11 (0.19 -> 0.53) and B17, and falls for F02, C01, B16, B15 and D01;
+  B01 has no date after its window.
   F02 and B17 already show strong lines before the cut (0.44 and 0.41), so in 2023 some crops show
   their sowing rows all season.
 
