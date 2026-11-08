@@ -159,3 +159,88 @@ The box check is unchanged in every season: 3 of 4 and 24 of 30 for 2025, 6 of 7
 | 2024 -> 2025 | 70.4% | 16.3% |
 | 2025 -> 2023 | 51.3% | 11.8% |
 | 2023 -> 2025 | 69.7% | 16.3% |
+
+## Faint straight borders (9 November 2026)
+
+Plan: `docs/superpowers/plans/2026-11-09-field-lines.md`.
+
+**The problem.** Step 3's box check found every box off by more than 0.05 inside an oversized region (2023-F0017,
+3,633 ha; 2024-F0056, 1,229 ha). Joining is not the cause: F0017 came out of the watershed as 2 regions, F0056 as
+1. Inside F0017, 95% of pixels have a season edge under the calm level of 0.15, and on no date do more than 0.4%
+of its pixels reach 0.30. On the season-edge picture the borders between its fields are plainly there, as thin
+straight lines of about 0.10 to 0.13 against 0.05 to 0.09 inside the fields. They were too faint to stop the
+calm area, so one marker spread over several fields.
+
+**The change.** Field borders here are long and straight; noise and wet hollows are not. So the season edge is
+now also read along lines (`LineStrength`): for each pixel and each of 12 directions, the median season edge
+along a 71-pixel (710 m) segment centred on it, minus the mean season edge in the 71 x 71 square around it. A
+pixel whose best direction scores at least 0.025 is raised to the calm level, so markers stop at it and floods
+meet on it. Joining is unchanged. In a first trial with 31-pixel segments, the line strength across one 2025 border was about 0.05 on the border
+and under 0.015 inside the fields.
+
+**Tuning on 2025.** Tried with scratch code before writing the product code. Rows marked * also checked
+brightness curves when joining; that made no difference at a 35-pixel radius and was dropped.
+
+| radius | lineEdge | regions | field area in regions over 500 ha | two-field boxes crossed | one-field boxes not crossed |
+|---|---|---|---|---|---|
+| (before) | | 691 | 5,545 ha | 3 of 4 | 24 of 30 |
+| 15 | 0.02 | 1,008 | 564 ha | 4 of 4 | 17 of 30 |
+| 15 | 0.03 | 804 | 3,130 ha | 4 of 4 | 23 of 30 |
+| 15 | 0.04 | 760 | 2,914 ha | 3 of 4 | 24 of 30 |
+| 25 | 0.025* | 872 | 1,084 ha | 4 of 4 | 23 of 30 |
+| 35 | 0.02* | 880 | 571 ha | 4 of 4 | 21 of 30 |
+| 35 | 0.025 | 762 | 1,082 ha | 4 of 4 | 23 of 30 |
+| 35 | 0.03* | 806 | 1,421 ha | 4 of 4 | 24 of 30 |
+
+Chosen: radius 35, lineEdge 0.025. By eye on the two largest 2025 regions, radius 35 split the joined fields as
+well as radius 25, with fewer ragged pieces. (I looked at 2023-F0017 to diagnose the problem before any value was
+chosen, but no value was chosen on it.)
+
+**All three seasons**, each under `java -Xmx1g`, 2024 and 2023 unchanged:
+
+| season | run time | regions | field | fallow | other | left out |
+|---|---|---|---|---|---|---|
+| 2025, tuned on | 47 s | 762 (was 691) | 369, 24,000 ha | 11, 697 ha | 382, 15,454 ha | 289.2 ha |
+| 2024 | 48 s | 659 (was 520) | 377, 25,836 ha | 18, 1,417 ha | 264, 12,957 ha | 230.7 ha |
+| 2023 | 48 s | 569 (was 426) | 301, 26,292 ha | 45, 2,387 ha | 223, 11,503 ha | 258.9 ha |
+
+Oversized regions, before -> after:
+
+| season | field area in regions over 500 ha | regions over 1,000 ha | largest field region |
+|---|---|---|---|
+| 2025 | 5,545 ha (23%) -> 1,082 ha (5%) | 2 -> 0 | 1,976 ha -> 575 ha |
+| 2024 | 7,484 ha (29%) -> 1,162 ha (4%) | 3 -> 0 | 1,229 ha -> 659 ha |
+| 2023 | 11,838 ha (46%) -> 1,695 ha (6%) | 3 -> 0 | 3,633 ha -> 650 ha |
+
+On the photo, the old 3,633 ha region of 2023 now comes out as the patchwork of rectangular fields it is.
+
+**Box check** (consistency, not ground truth):
+
+| season | two-field boxes crossed | one-field boxes not crossed | pooled |
+|---|---|---|---|
+| 2025, tuned on | 3 of 4 -> 4 of 4 | 24 of 30 -> 23 of 30 | 27 -> 27 of 34 |
+| 2024 | 6 of 7 -> 7 of 7 | 21 of 27 -> 19 of 27 | 27 -> 26 of 34 |
+| 2023 | 7 of 7 -> 7 of 7 | 26 of 27 -> 24 of 27 | 33 -> 31 of 34 |
+
+Every two-field box is now crossed. Fixed: 2025 B13, 2024 B02 and B19. Newly crossed though read as one field,
+each looked at on the post-harvest photo:
+- 2024 B14: the new line runs along a visible change of colour at the box's top edge; probably a real border.
+- 2024 F04: split along a dark track across the field; could be a border, can't tell.
+- 2023 F02: split along a pale strip with dashes running through the field; unclear.
+- 2024 B11: split by a line with no visible border on that photo.
+- 2023 B08: a pale straight stripe inside one field cut it into three long slivers. Wrong.
+- 2025 D01: a long thin sliver cut off the meadow along a faint line. Wrong.
+
+So the new lines sometimes follow tracks or stripes inside a field and cut off long thin slivers. A rule for
+slivers (a region much longer than it is wide, joined back to its neighbour) would be the next thing to try; it
+is not done here.
+
+**Stability** rose: 2025 -> 2024 60.2% -> 64.1% (chance 15.6%), 2024 -> 2025 70.4% -> 70.8% (17.4%),
+2025 -> 2023 51.3% -> 57.4% (14.2%), 2023 -> 2025 69.7% -> 69.3% (17.4%).
+
+**Step 3 box gaps** (rerun of `series` and `SeriesCheck`): 29 boxes lie wholly inside one field's interior
+(was 40; the new borders cross some boxes). All 29 have a median gap under 0.05 (was 36 of 40). The median of
+the median gaps is 0.007 (was 0.016), the largest 0.024 (was 0.067).
+
+Outputs from before this change are kept in `data/fields-<year>-before-lines` and
+`data/series-<year>-before-lines`.
