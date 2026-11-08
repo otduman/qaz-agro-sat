@@ -102,7 +102,8 @@ public final class ContactSheet {
         return thumb;
     }
 
-    private static int stretch(double reflectance) {
+    /** Reflectance to an 8-bit display value, the stretch every true-colour picture uses. */
+    public static int stretch(double reflectance) {
         double value = Math.clamp(reflectance / WHITE_POINT, 0.0, 1.0);
         return (int) Math.round(Math.pow(value, GAMMA) * 255);
     }

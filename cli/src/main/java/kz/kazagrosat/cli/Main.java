@@ -18,9 +18,16 @@ import java.util.Set;
 import java.util.stream.Stream;
 import kz.kazagrosat.core.export.GeoTiffWriter;
 import kz.kazagrosat.core.export.NdviPng;
+import kz.kazagrosat.core.fields.FieldFinder;
+import kz.kazagrosat.core.fields.FieldMap;
+import kz.kazagrosat.core.fields.FieldParameters;
+import kz.kazagrosat.core.fields.LandLabel;
+import kz.kazagrosat.core.fields.Region;
 import kz.kazagrosat.core.geo.BoundingBox;
 import kz.kazagrosat.pipeline.NdviPipeline;
 import kz.kazagrosat.pipeline.NdviResult;
+import kz.kazagrosat.pipeline.fields.FieldOutputs;
+import kz.kazagrosat.pipeline.fields.StackImages;
 import kz.kazagrosat.pipeline.http.RetryPolicy;
 import kz.kazagrosat.pipeline.stac.SceneSelector;
 import kz.kazagrosat.pipeline.stac.StacClient;
@@ -29,13 +36,14 @@ import kz.kazagrosat.pipeline.stac.StacSearch;
 import kz.kazagrosat.pipeline.stack.ContactSheet;
 import kz.kazagrosat.pipeline.stack.SeasonStack;
 import kz.kazagrosat.pipeline.stack.SeasonStackBuilder;
+import kz.kazagrosat.pipeline.stack.StackEntry;
 import kz.kazagrosat.pipeline.stack.StackReport;
 
 /** Command line entry point. Exit codes: 0 success, 1 the work failed, 2 the command was wrong. */
 public final class Main {
 
     private static final String USAGE = """
-            KazAgroSat: Sentinel-2 maps and season stacks for a small area
+            KazAgroSat: Sentinel-2 maps, season stacks and field boundaries for a small area
 
             Usage:
               scenes --bbox W,S,E,N --from YYYY-MM-DD --to YYYY-MM-DD [--max-cloud PERCENT]
@@ -48,7 +56,12 @@ public final class Main {
                   Downloads every usable date from May to October into FOLDER, with an
                   index and a contact sheet. Run it again to finish an interrupted download.
 
-            Every command accepts --stac-url URL to use a different STAC API.
+              fields --stack FOLDER --out FOLDER
+                  Finds the season's fields from a stack made by the season command and
+                  writes them as GeoJSON, a label GeoTIFF, outline pictures and a summary.
+
+            The scenes, ndvi and season commands accept --stac-url URL to use a
+            different STAC API.
             """;
 
     private static final String STAC_URL = "--stac-url";
@@ -126,6 +139,12 @@ public final class Main {
                 int year = parseYear(require(options, "--year"));
                 Path folder = Path.of(require(options, "--out"));
                 yield (out, err) -> season(bbox, year, folder, stacUri, out, err);
+            }
+            case "fields" -> {
+                allowOnly(options, Set.of("--stack", "--out"));
+                Path stack = Path.of(require(options, "--stack"));
+                Path folder = Path.of(require(options, "--out"));
+                yield (out, err) -> fields(stack, folder, out, err);
             }
             default -> throw new IllegalArgumentException("Unknown command: " + args[0]);
         };
@@ -223,6 +242,38 @@ public final class Main {
             report.failures().forEach(line -> err.println("  " + line));
             err.println("Run the same command again to retry them.");
             return 1;
+        }
+        return 0;
+    }
+
+    private static int fields(Path stackFolder, Path folder, PrintStream out, PrintStream err)
+            throws IOException, InterruptedException {
+        SeasonStack stack = SeasonStack.open(stackFolder);
+        StackImages images = new StackImages(stack);
+        if (images.dates().isEmpty()) {
+            throw new IOException(stackFolder + " has no stored dates, so there is nothing to find fields in");
+        }
+        FieldMap map = FieldFinder.find(images, FieldParameters.DEFAULTS, err::println);
+        List<Path> written = FieldOutputs.write(stack, map, folder);
+
+        double hectaresPerPixel = map.grid().pixelSize() * map.grid().pixelSize() / 10_000;
+        long cloudy = stack.entries().stream().filter(e -> e.status() == StackEntry.Status.CLOUDY).count();
+        out.println(text("Season:  %d, %d dates used, %d cloudy dates skipped",
+                stack.area().year(), images.dates().size(), cloudy));
+        StringBuilder byLand = new StringBuilder();
+        for (LandLabel land : LandLabel.values()) {
+            List<Region> regions = map.regions().stream().filter(r -> r.land() == land).toList();
+            long pixels = regions.stream().mapToLong(Region::pixels).sum();
+            byLand.append(byLand.isEmpty() ? "" : ", ").append(text("%d %s (%,.1f ha)",
+                    regions.size(), land.name().toLowerCase(Locale.ROOT), pixels * hectaresPerPixel));
+        }
+        out.println(text("Fields:  %d regions: %s", map.regions().size(), byLand));
+        double dropped = map.summary().droppedPixels() * hectaresPerPixel;
+        double noData = map.summary().noDataPixels() * hectaresPerPixel;
+        out.println(text("Left out: %,.1f ha (dropped under %.0f ha %,.1f, no clear data %,.1f)",
+                dropped + noData, FieldParameters.DEFAULTS.minRegionHectares(), dropped, noData));
+        for (int i = 0; i < written.size(); i++) {
+            out.println((i == 0 ? "Wrote:   " : "         ") + written.get(i));
         }
         return 0;
     }
