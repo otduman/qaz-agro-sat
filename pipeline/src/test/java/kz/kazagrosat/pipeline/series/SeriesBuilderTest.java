@@ -151,6 +151,27 @@ class SeriesBuilderTest {
         assertTrue(wheat.hasValues());
     }
 
+    /** Ice cloud also has a high snow index; where the mask already calls it cloud, it isn't snow. */
+    @Test
+    void cloudThatPassesTheSnowTestIsNotSnow() throws Exception {
+        HandStack hand = HandFields.stack(folder.resolve("stack"));
+        LocalDate date = LocalDate.parse("2025-06-25");
+        hand.layer(date, Layer.SCL, maskWithLeftColumns(20, 9));
+        int[] green = new int[HandFields.WIDTH * HandFields.HEIGHT];
+        int[] nir = new int[green.length];
+        Arrays.fill(green, HandStack.dn(0.6));
+        Arrays.fill(nir, HandStack.dn(0.55));
+        int[] swir16 = new int[MASK_WIDTH * MASK_HEIGHT];
+        Arrays.fill(swir16, HandStack.dn(0.1));
+        hand.layer(date, Layer.GREEN, green).layer(date, Layer.NIR, nir).layer(date, Layer.SWIR16, swir16);
+
+        Series series = build(hand);
+
+        assertEquals(0.0, row(series, "2025-F0001", "2025-06-25").snowShare(), 1e-9, "all cloud by the mask");
+        assertEquals(1.0, row(series, "2025-F0002", "2025-06-25").snowShare(), 1e-9,
+                "the mask calls it clear ground, the snow test finds snow");
+    }
+
     @Test
     void otherRegionsAreListedButGetNoRows() throws Exception {
         Series series = build(HandFields.stack(folder.resolve("stack")));

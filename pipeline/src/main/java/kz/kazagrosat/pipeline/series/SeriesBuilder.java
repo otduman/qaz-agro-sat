@@ -152,13 +152,16 @@ public final class SeriesBuilder {
             int[] classes = StackImages.classesOnBandGrid(stack.raw(date, Layer.SCL), maskGrid, grid);
             boolean[] snowTest = SnowTest.snow(green, nir, swir16);
             float[] brightness = StackImages.brightness(blue, green, red);
-            boolean[] clear = StackImages.clear(SclMask.usable(classes), snowTest, brightness, nir);
+            boolean[] usableByMask = SclMask.usable(classes);
+            boolean[] clear = StackImages.clear(usableByMask, snowTest, brightness, nir);
 
             boolean[] snow = new boolean[classes.length];
             boolean[] usable = new boolean[classes.length];
             float[] ndti = new float[classes.length];
             for (int i = 0; i < classes.length; i++) {
-                snow[i] = snowTest[i] || classes[i] == SclMask.SNOW;
+                // the mask's own snow, plus snow the mask took for clear ground; ice cloud also passes the
+                // snow test, so it doesn't count where the mask already calls it cloud
+                snow[i] = classes[i] == SclMask.SNOW || (snowTest[i] && usableByMask[i]);
                 usable[i] = clear[i] && inInterior[i];
                 ndti[i] = (swir16[i] - swir22[i]) / (swir16[i] + swir22[i]);
             }

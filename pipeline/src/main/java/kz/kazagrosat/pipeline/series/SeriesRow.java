@@ -13,7 +13,8 @@ import java.time.LocalDate;
  * @param ndti the tillage index (b11 - b12) / (b11 + b12), per pixel and then the median
  * @param brightness the mean of blue, green and red
  * @param blue blue reflectance, which haze raises
- * @param snowShare the share the cloud mask calls snow or the snow test finds snow
+ * @param snowShare the share the cloud mask calls snow, plus the share it calls clear ground where the snow
+ *     test finds snow (cloud never counts)
  * @param roughness, lineStrength, lineDirection see {@link kz.kazagrosat.core.series.Texture}
  */
 public record SeriesRow(String field, LocalDate date, double clearShare, double ndviP25, double ndviMedian,
