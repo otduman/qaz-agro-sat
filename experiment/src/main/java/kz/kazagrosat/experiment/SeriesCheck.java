@@ -376,6 +376,12 @@ public final class SeriesCheck {
                 json.writeStartObject();
                 json.writeStringField("name", box.field().name());
                 json.writeStringField("reading", box.reading());
+                if (box.cutFrom() != null && box.cutTo() != null) {
+                    json.writeArrayFieldStart("cut");
+                    json.writeString(box.cutFrom().toString());
+                    json.writeString(box.cutTo().toString());
+                    json.writeEndArray();
+                }
                 json.writeStringField("field", fieldOfBox.get(box.field().name()));
                 Double gap = gapOfBox.get(box.field().name());
                 if (gap == null) {
