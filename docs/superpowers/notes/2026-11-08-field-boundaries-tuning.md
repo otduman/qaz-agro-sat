@@ -59,6 +59,11 @@ values to my eye rather than to the ground. Final values, used unchanged on 2024
 | maxHoleHectares | 1.0 | uniformitySpread | 0.25 |
 | simplifyMetres | 10.0 | | |
 
+One consequence of round 1: with markerShrink at 2 instead of 3, a gap in a boundary line keeps two
+fields apart only up to about 40 m (twice the shrink), not the 60 m the plan's decision 2 assumed. A
+gap wider than that, such as a farm track crossing, can join two fields' seeds into one. The step 2
+review pointed this out (its finding M4); the gap tests use a 4-pixel gap, exactly the new limit.
+
 ## Results on all three seasons (frozen values)
 
 Each run used `java -Xmx1g`, so it stayed under 1 GB of memory.

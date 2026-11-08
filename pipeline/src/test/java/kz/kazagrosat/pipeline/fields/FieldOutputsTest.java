@@ -90,7 +90,9 @@ class FieldOutputsTest {
         assertTrue(summary.contains("Dates used: 8"), summary);
         assertTrue(summary.contains("Cloudy dates skipped: 0"), summary);
         assertTrue(summary.contains("Regions: 2 (field 1, fallow 1, other 0)"), summary);
-        assertTrue(summary.contains("Pixels with too few clear dates: 0"), summary);
+        assertTrue(summary.contains("Pixels with too few clear dates, or cut off by them: 0"), summary);
+        assertTrue(summary.contains("Parameters: brightnessWeight 5.0, edgeRank 3, markerEdge 0.15,"), summary);
+        assertTrue(summary.contains("simplifyMetres 10.0"), summary);
         assertTrue(summary.contains("Mid-season picture: 2025-07-10"), summary);
     }
 

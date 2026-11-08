@@ -129,7 +129,7 @@ public final class FieldOutputs {
         line(text, "Holes under %.1f ha filled: %d, %.2f ha", p.maxHoleHectares(), s.filledHoles(),
                 s.filledPixels() * hectaresPerPixel);
         line(text, "Holes kept: %d", s.keptHoles());
-        line(text, "Pixels with too few clear dates: %d, leaving out %.2f ha", s.noDataPixels(),
+        line(text, "Pixels with too few clear dates, or cut off by them: %d, leaving out %.2f ha", s.noDataPixels(),
                 s.noDataPixels() * hectaresPerPixel);
         line(text, "Regions: %d (field %d, fallow %d, other %d)", map.regions().size(), count.get(LandLabel.FIELD),
                 count.get(LandLabel.FALLOW), count.get(LandLabel.OTHER));
@@ -142,7 +142,21 @@ public final class FieldOutputs {
                 .orElse("none, no stored date from " + MID_SEASON_FROM + " to " + MID_SEASON_TO));
         line(text, "Post-harvest picture: %s", postHarvest.map(LocalDate::toString)
                 .orElse("none, no stored date from " + POST_HARVEST_FROM + " to " + POST_HARVEST_TO));
+        line(text, "Parameters: %s", parameters(p));
         return text.toString();
+    }
+
+    /** Every parameter by name, in the record's order, so a folder says which values made it. */
+    static String parameters(FieldParameters p) {
+        List<String> parts = new java.util.ArrayList<>();
+        for (java.lang.reflect.RecordComponent c : FieldParameters.class.getRecordComponents()) {
+            try {
+                parts.add(c.getName() + " " + c.getAccessor().invoke(p));
+            } catch (ReflectiveOperationException e) {
+                throw new IllegalStateException(e);
+            }
+        }
+        return String.join(", ", parts);
     }
 
     private static void line(StringBuilder text, String format, Object... values) {

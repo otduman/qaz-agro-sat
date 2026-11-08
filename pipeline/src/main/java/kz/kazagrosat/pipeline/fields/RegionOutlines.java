@@ -68,7 +68,8 @@ public final class RegionOutlines {
         }
         Map<Integer, Polygon> outlines = new LinkedHashMap<>();
         for (Map.Entry<Integer, Edges> entry : edgesByRegion.entrySet()) {
-            outlines.put(entry.getKey(), polygon(entry.getKey(), entry.getValue(), grid));
+            outlines.put(entry.getKey(), polygon(entry.getKey(), entry.getValue(), grid,
+                    (i, j) -> junction(labels, width, height, i, j)));
         }
         return outlines;
     }
@@ -95,10 +96,29 @@ public final class RegionOutlines {
         return result;
     }
 
-    private static Polygon polygon(int region, Edges edges, PixelGrid grid) {
+    /** Whether three or more labels (outside the image counting as one) meet at lattice corner (i, j). */
+    private static boolean junction(int[] labels, int width, int height, int i, int j) {
+        int[] around = new int[4];
+        int n = 0;
+        for (int dy = -1; dy <= 0; dy++) {
+            for (int dx = -1; dx <= 0; dx++) {
+                int x = i + dx;
+                int y = j + dy;
+                around[n++] = x < 0 || y < 0 || x >= width || y >= height ? -1 : labels[y * width + x];
+            }
+        }
+        return Arrays.stream(around).distinct().count() >= 3;
+    }
+
+    @FunctionalInterface
+    private interface Junction {
+        boolean at(int i, int j);
+    }
+
+    private static Polygon polygon(int region, Edges edges, PixelGrid grid, Junction junction) {
         List<LinearRing> shells = new ArrayList<>();
         List<LinearRing> holes = new ArrayList<>();
-        for (Coordinate[] ring : edges.rings(grid)) {
+        for (Coordinate[] ring : edges.rings(grid, junction)) {
             LinearRing linearRing = FACTORY.createLinearRing(ring);
             if (signedArea(ring) > 0) {
                 shells.add(linearRing);
@@ -110,7 +130,12 @@ public final class RegionOutlines {
             throw new IllegalStateException("Region " + region + " has " + shells.size()
                     + " outer outlines; each region must be one 4-connected piece");
         }
-        return FACTORY.createPolygon(shells.get(0), holes.toArray(LinearRing[]::new));
+        Polygon polygon = FACTORY.createPolygon(shells.get(0), holes.toArray(LinearRing[]::new));
+        if (!polygon.isValid()) {
+            throw new IllegalStateException("Region " + region + " gives an invalid outline; each region must be one "
+                    + "4-connected piece");
+        }
+        return polygon;
     }
 
     /** Positive for counter-clockwise rings in map coordinates. */
@@ -159,7 +184,7 @@ public final class RegionOutlines {
             return direction[out[0]] == right ? out[0] : out[1];
         }
 
-        List<Coordinate[]> rings(PixelGrid grid) {
+        List<Coordinate[]> rings(PixelGrid grid, Junction junction) {
             List<Coordinate[]> rings = new ArrayList<>();
             boolean[] used = new boolean[size];
             List<Integer> cycle = new ArrayList<>();
@@ -176,7 +201,7 @@ public final class RegionOutlines {
                 for (int m = 0; m < cycle.size(); m++) {
                     int e = cycle.get(m);
                     int previous = cycle.get((m + cycle.size() - 1) % cycle.size());
-                    if (direction[e] != direction[previous]) {
+                    if (direction[e] != direction[previous] || junction.at(startI[e], startJ[e])) {
                         points.add(corner(grid, startI[e], startJ[e]));
                     }
                 }
