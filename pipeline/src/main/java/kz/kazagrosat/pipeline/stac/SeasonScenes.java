@@ -38,6 +38,17 @@ public record SeasonScenes(String tile, List<StacItem> scenes) {
         return best.map(entry -> new SeasonScenes(entry.getKey(), onePerDate(entry.getValue())));
     }
 
+    /**
+     * As {@link #choose(List, BoundingBox)}, but on the given tile, so a resumed download stays on the tile it
+     * started on. Empty when no scene on that tile covers the area.
+     */
+    public static Optional<SeasonScenes> choose(List<StacItem> found, BoundingBox area, String tile) {
+        List<StacItem> onTile = found.stream()
+                .filter(scene -> tileOf(scene).equals(tile) && SceneSelector.covers(scene, area))
+                .toList();
+        return onTile.isEmpty() ? Optional.empty() : Optional.of(new SeasonScenes(tile, onePerDate(onTile)));
+    }
+
     private static long distinctDates(List<StacItem> scenes) {
         return scenes.stream().map(SeasonScenes::dateOf).distinct().count();
     }

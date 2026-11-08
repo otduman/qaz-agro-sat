@@ -69,22 +69,29 @@ public final class SeasonStackBuilder {
     public StackReport build(BoundingBox area, int year, Path folder) throws IOException, InterruptedException {
         LocalDate from = LocalDate.of(year, 5, 1);
         LocalDate to = LocalDate.of(year, 10, 31);
+        // Refused before any search: a folder holding another season stays as it is.
+        Optional<StackArea> existing = StackArea.read(folder);
+        if (existing.isPresent() && !existing.get().sameRequest(area, year)) {
+            throw new IOException(alreadyHolds(folder, existing.get()));
+        }
         progress.accept("Searching for scenes from " + from + " to " + to + "...");
         List<StacItem> found = stac.search(new StacSearch(NdviPipeline.COLLECTION, area, from, to, MAX_TILE_CLOUD));
-        SeasonScenes season = SeasonScenes.choose(found, area).orElseThrow(() -> new IOException(
-                "No single Sentinel-2 tile covers the whole area on any date in " + year
+        if (found.isEmpty()) {
+            throw new IOException("No Sentinel-2 scene of the area was found from " + from + " to " + to
+                    + " with under " + (int) MAX_TILE_CLOUD + "% cloud over its tile. Check the area and the year.");
+        }
+        Optional<SeasonScenes> chosen = existing.isPresent()
+                ? SeasonScenes.choose(found, area, existing.get().tile())
+                : SeasonScenes.choose(found, area);
+        SeasonScenes season = chosen.orElseThrow(() -> new IOException(existing.isPresent()
+                ? alreadyHolds(folder, existing.get()) + " No scene on that tile was found this time."
+                : "No single Sentinel-2 tile covers the whole area on any date in " + year
                         + ". Areas that need several tiles are not supported yet."));
 
-        Optional<StackArea> existing = StackArea.read(folder);
-        if (existing.isPresent()
-                && (!existing.get().sameRequest(area, year) || !existing.get().tile().equals(season.tile()))) {
-            StackArea held = existing.get();
-            throw new IOException(folder + " already holds the " + held.year() + " season for "
-                    + describe(held.bbox()) + " on tile " + held.tile() + ". Use another folder.");
-        }
-
         Path indexFile = folder.resolve(SeasonStack.INDEX);
-        List<StackEntry> finished = new ArrayList<>(StackIndex.read(indexFile));
+        // A date whose files were deleted since is downloaded again.
+        List<StackEntry> finished = new ArrayList<>(StackIndex.read(indexFile).stream()
+                .filter(entry -> filesExist(folder, entry)).toList());
         Set<LocalDate> finishedDates = finished.stream().map(StackEntry::date).collect(Collectors.toSet());
         List<StacItem> todo = season.scenes().stream()
                 .filter(scene -> !finishedDates.contains(SeasonScenes.dateOf(scene))).toList();
@@ -176,6 +183,17 @@ public final class SeasonStackBuilder {
         } finally {
             pool.shutdown();
         }
+    }
+
+    private static String alreadyHolds(Path folder, StackArea held) {
+        return folder + " already holds the " + held.year() + " season for " + describe(held.bbox()) + " on tile "
+                + held.tile() + ". Use another folder.";
+    }
+
+    /** Whether every file an index entry stands for is still there. */
+    private static boolean filesExist(Path folder, StackEntry entry) {
+        List<Layer> layers = entry.status() == StackEntry.Status.STORED ? List.of(Layer.values()) : List.of(Layer.SCL);
+        return layers.stream().allMatch(layer -> Files.isRegularFile(SeasonStack.layerFile(folder, entry.date(), layer)));
     }
 
     /** Finds the area's grids on the tile, from one scene's cloud mask and red band. */

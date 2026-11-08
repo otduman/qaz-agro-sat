@@ -186,6 +186,49 @@ class SeasonStackBuilderTest {
     }
 
     @Test
+    void theStackEntriesCannotBeChanged() throws Exception {
+        fake.scene("2025-07-12", 3);
+        build(2025);
+
+        List<StackEntry> entries = SeasonStack.open(folder).entries();
+
+        assertThrows(UnsupportedOperationException.class, () -> entries.add(entries.getFirst()));
+    }
+
+    @Test
+    void refusesAnotherSeasonBeforeSearching() throws Exception {
+        fake.scene("2025-07-12", 3).scene("2024-07-12", 3);
+        build(2025);
+        int requestsBefore = fake.server().requests().size();
+
+        assertThrows(IOException.class, () -> build(2024));
+
+        assertEquals(requestsBefore, fake.server().requests().size(), "no search for a season it would refuse");
+    }
+
+    @Test
+    void saysSoWhenTheSearchFindsNoScene() {
+        IOException error = assertThrows(IOException.class, () -> build(2025));
+
+        assertTrue(error.getMessage().contains("No Sentinel-2 scene"), error.getMessage());
+        assertFalse(error.getMessage().contains("several tiles"), error.getMessage());
+    }
+
+    @Test
+    void aDateWhoseFilesWereDeletedIsDownloadedAgain() throws Exception {
+        fake.scene("2025-07-12", 3).scene("2025-08-03", 7);
+        build(2025);
+        Path red = SeasonStack.layerFile(folder, JULY, Layer.RED);
+        Files.delete(red);
+
+        StackReport second = build(2025);
+
+        assertEquals(1, second.stored(), "July is stored again");
+        assertEquals(FakeSeason.expectedDn("red", 14, 2), SeasonStack.open(folder).raw(JULY, Layer.RED)[0]);
+        assertEquals(2, SeasonStack.open(folder).entries().size());
+    }
+
+    @Test
     void refusesAnAreaNoSingleTileCovers() {
         fake.sceneOutside("2025-07-12");
 

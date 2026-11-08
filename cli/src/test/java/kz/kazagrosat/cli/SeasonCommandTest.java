@@ -95,4 +95,15 @@ class SeasonCommandTest {
 
         assertTrue(stdout().contains("season --bbox"), stdout());
     }
+
+    @Test
+    void aContactSheetThatCannotBeDrawnStillLeavesTheSummary() throws Exception {
+        java.nio.file.Files.createDirectories(folder.resolve("season").resolve("contact-sheet.png").resolve("blocker"));
+
+        int code = runSeason("2025");
+
+        assertTrue(stdout().contains("Tile:    T41UMV"), stdout());
+        assertTrue(stderr().contains("Could not draw the contact sheet"), stderr());
+        assertEquals(1, code, "the run says something went wrong");
+    }
 }

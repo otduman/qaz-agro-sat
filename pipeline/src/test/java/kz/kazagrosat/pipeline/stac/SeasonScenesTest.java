@@ -66,6 +66,20 @@ class SeasonScenesTest {
     }
 
     @Test
+    void keepsTheTileAnEarlierRunChose() {
+        List<StacItem> found = List.of(
+                covering("T41UMV", "2025-07-12T07:10:00Z", 10),
+                covering("T41UMV", "2025-07-17T07:10:00Z", 10),
+                covering("T41UNV", "2025-07-14T07:10:00Z", 1));
+
+        SeasonScenes season = SeasonScenes.choose(found, AREA, "T41UNV").orElseThrow();
+
+        assertEquals("T41UNV", season.tile(), "the stack on disk is on T41UNV, so a rerun stays there");
+        assertEquals(1, season.scenes().size());
+        assertTrue(SeasonScenes.choose(found, AREA, "T42ABC").isEmpty(), "a tile with no scene gives nothing");
+    }
+
+    @Test
     void isEmptyWhenNoSceneCoversTheArea() {
         StacItem elsewhere = scene("T41UMV", "2025-07-12T07:10:00Z", 1, new Envelope(70.0, 71.0, 50.0, 51.0));
 

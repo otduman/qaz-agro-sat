@@ -25,7 +25,7 @@ public final class SeasonStack {
     private SeasonStack(Path folder, StackArea area, List<StackEntry> entries) {
         this.folder = folder;
         this.area = area;
-        this.entries = entries;
+        this.entries = List.copyOf(entries);
     }
 
     public static SeasonStack open(Path folder) throws IOException {

@@ -241,9 +241,16 @@ public final class Main {
                 .build(bbox, year, folder);
         SeasonStack stack = SeasonStack.open(folder);
         Path sheet = folder.resolve("contact-sheet.png");
+        boolean sheetFailed = false;
         if (!stack.entries().isEmpty()) {
             err.println("Drawing the contact sheet...");
-            ContactSheet.write(stack, sheet);
+            try {
+                ContactSheet.write(stack, sheet);
+            } catch (IOException | RuntimeException e) {
+                // The dates are stored either way; say what went wrong and still print the summary.
+                err.println("Could not draw the contact sheet " + sheet + ": " + e.getMessage());
+                sheetFailed = true;
+            }
         }
 
         out.println("Tile:    " + report.tile());
@@ -259,7 +266,7 @@ public final class Main {
             err.println("Run the same command again to retry them.");
             return 1;
         }
-        return 0;
+        return sheetFailed ? 1 : 0;
     }
 
     private static int fields(Path stackFolder, Path folder, PrintStream out, PrintStream err)
