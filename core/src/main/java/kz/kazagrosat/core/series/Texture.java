@@ -11,7 +11,9 @@ import java.util.Arrays;
  * flag array can serve every field.
  * <ul>
  *   <li><b>Roughness</b> is the median of the 3 x 3 standard deviation of brightness, divided by the
- *       median brightness, so it doesn't change when the whole field gets brighter.</li>
+ *       median brightness of the same counted pixels (not of the whole clear interior, which the series
+ *       reports as brightness; the two differ slightly), so it doesn't change when the whole field gets
+ *       brighter.</li>
  *   <li><b>Line strength</b> is the coherence of the summed gradient structure tensor, from 0 (no
  *       preferred direction) to 1 (every gradient parallel). Gradients are Sobel divided by 4, as in
  *       the field boundaries.</li>

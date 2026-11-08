@@ -28,11 +28,11 @@ import kz.kazagrosat.pipeline.NdviPipeline;
 import kz.kazagrosat.pipeline.NdviResult;
 import kz.kazagrosat.pipeline.fields.FieldOutputs;
 import kz.kazagrosat.pipeline.fields.StackImages;
+import kz.kazagrosat.pipeline.http.RetryPolicy;
 import kz.kazagrosat.pipeline.series.Series;
 import kz.kazagrosat.pipeline.series.SeriesBuilder;
 import kz.kazagrosat.pipeline.series.SeriesField;
 import kz.kazagrosat.pipeline.series.SeriesOutputs;
-import kz.kazagrosat.pipeline.http.RetryPolicy;
 import kz.kazagrosat.pipeline.stac.SceneSelector;
 import kz.kazagrosat.pipeline.stac.StacClient;
 import kz.kazagrosat.pipeline.stac.StacItem;
@@ -296,6 +296,12 @@ public final class Main {
 
     private static int series(Path stackFolder, Path fieldsFolder, Path folder, PrintStream out, PrintStream err)
             throws IOException, InterruptedException {
+        for (Path input : List.of(stackFolder, fieldsFolder)) {
+            if (sameFolder(input, folder)) {
+                throw new IllegalArgumentException("--out " + folder + " would overwrite files in " + input
+                        + ", such as its summary. Give the series a folder of its own.");
+            }
+        }
         Series series = SeriesBuilder.build(SeasonStack.open(stackFolder), fieldsFolder, err::println);
         List<Path> written = SeriesOutputs.write(series, folder);
 
@@ -312,6 +318,13 @@ public final class Main {
             out.println((i == 0 ? "Wrote:   " : "         ") + written.get(i));
         }
         return 0;
+    }
+
+    /** Whether two paths name the same folder, following links where the folders exist. */
+    private static boolean sameFolder(Path a, Path b) throws IOException {
+        Path left = Files.exists(a) ? a.toRealPath() : a.toAbsolutePath().normalize();
+        Path right = Files.exists(b) ? b.toRealPath() : b.toAbsolutePath().normalize();
+        return left.equals(right);
     }
 
     private static long sizeOf(Path folder) throws IOException {

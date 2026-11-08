@@ -118,4 +118,22 @@ class SeriesCommandTest {
 
         assertTrue(stdout().contains("series --stack FOLDER --fields FOLDER --out FOLDER"), stdout());
     }
+
+    @Test
+    void refusesToWriteIntoTheFieldsOrStackFolder() throws Exception {
+        java.util.List<String> before;
+        try (java.util.stream.Stream<Path> files = Files.list(fields)) {
+            before = files.map(p -> p.getFileName().toString()).sorted().toList();
+        }
+
+        assertEquals(1, run("series", "--stack", stack.toString(), "--fields", fields.toString(), "--out",
+                fields.resolve(".").toString()));
+        assertEquals(1, run("series", "--stack", stack.toString(), "--fields", fields.toString(), "--out",
+                stack.toString()));
+
+        assertTrue(stderr().contains("would overwrite"), stderr());
+        try (java.util.stream.Stream<Path> files = Files.list(fields)) {
+            assertEquals(before, files.map(p -> p.getFileName().toString()).sorted().toList());
+        }
+    }
 }

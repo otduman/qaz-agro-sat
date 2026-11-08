@@ -147,4 +147,38 @@ class SeriesOutputsTest {
         assertTrue(filesIn(out).stream().noneMatch(n -> n.endsWith(".part") || n.endsWith(".old")),
                 filesIn(out).toString());
     }
+
+    @Test
+    @EnabledOnOs(OS.WINDOWS)
+    void aLockedLastFilePutsTheEarlierOnesBack() throws Exception {
+        List<Path> written = SeriesOutputs.write(series, out);
+        Files.writeString(written.get(0), "edited by hand\n");
+        List<byte[]> before = new ArrayList<>();
+        for (Path file : written) {
+            before.add(Files.readAllBytes(file));
+        }
+
+        try (FileInputStream held = new FileInputStream(out.resolve("summary-2025.txt").toFile())) {
+            assertThrows(IOException.class, () -> SeriesOutputs.write(series, out));
+        }
+
+        for (int i = 0; i < written.size(); i++) {
+            assertArrayEquals(before.get(i), Files.readAllBytes(written.get(i)), written.get(i) + " changed");
+        }
+        assertTrue(filesIn(out).stream().noneMatch(n -> n.endsWith(".part") || n.endsWith(".old")),
+                filesIn(out).toString());
+    }
+
+    @Test
+    void aTinyNegativeValueIsWrittenAsZero() throws Exception {
+        SeriesRow row = new SeriesRow("2025-F0001", LocalDate.parse("2025-07-10"), 1.0, 0.4, 0.42, 0.44, 0.2, 0.2,
+                -0.00001, 0.12, 0.05, 0.05, 0.0, 0.0, 0.0, Double.NaN);
+        Series one = new Series(2025, "T41UMV", List.of(row.date()), series.fields(), List.of(row));
+
+        SeriesOutputs.write(one, out);
+
+        String line = lines("series-2025.csv").get(1);
+        assertTrue(line.contains(",0.2000,0.2000,0.0000,"), line);
+        assertTrue(!line.contains("-0.0000"), line);
+    }
 }

@@ -48,7 +48,7 @@ public final class SeriesCheck {
 
     static final int[] YEARS = {2025, 2024, 2023};
     static final double MIN_CLEAR = 0.6;
-    static final int SHRINK = 2;
+    static final int SHRINK = (int) Math.round(kz.kazagrosat.pipeline.series.SeriesBuilder.INTERIOR_METRES / 10);
     static final int SCALE = 2;
     static final int MAX_PHOTOS = 25;
     static final float JPEG_QUALITY = 0.82f;
@@ -79,7 +79,7 @@ public final class SeriesCheck {
         allGaps.sort(null);
         if (!allGaps.isEmpty()) {
             System.out.printf(Locale.ROOT, "%nAll seasons: %d boxes, median of their median gaps %.4f, largest %.4f%n",
-                    allGaps.size(), allGaps.get(allGaps.size() / 2), allGaps.get(allGaps.size() - 1));
+                    allGaps.size(), middle(allGaps), allGaps.get(allGaps.size() - 1));
         }
     }
 
@@ -161,7 +161,7 @@ public final class SeriesCheck {
             long under = gaps.stream().filter(g -> g < 0.05).count();
             System.out.printf(Locale.ROOT, "%d of %d boxes lie wholly inside one field's interior; %d of them have a "
                     + "median gap under 0.05; median of the median gaps %.4f%n", gaps.size(), boxes.size(), under,
-                    gaps.get(gaps.size() / 2));
+                    middle(gaps));
         }
         if (!lineLook.isEmpty()) {
             System.out.println("First look, line strength (median before the cut window -> after it):");
@@ -191,13 +191,19 @@ public final class SeriesCheck {
                 id, box.cutFrom(), box.cutTo(), medianText(before), before.size(), medianText(after), after.size());
     }
 
+    /** The median of sorted values: the mean of the middle two for an even count. */
+    static double middle(List<Double> sorted) {
+        int n = sorted.size();
+        return n % 2 == 1 ? sorted.get(n / 2) : (sorted.get(n / 2 - 1) + sorted.get(n / 2)) / 2;
+    }
+
     private static String medianText(List<Double> values) {
         if (values.isEmpty()) {
             return "-";
         }
         List<Double> sorted = new ArrayList<>(values);
         sorted.sort(null);
-        return String.format(Locale.ROOT, "%.3f", sorted.get(sorted.size() / 2));
+        return String.format(Locale.ROOT, "%.3f", middle(sorted));
     }
 
     /** Every box of the season, with its reading and its NDVI on dates at least 60% clear. */
