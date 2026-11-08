@@ -121,9 +121,9 @@ late-October dates. The expectation was the opposite, so I looked at why:
   pixels on 26 October 2023.
 - What does slip past is bright ground with a *low* snow index. On 27 October 2024 the pixels the mask
   calls clear have a median green reflectance of 0.155, against about 0.065 two days earlier, yet their
-  snow index is below 0 for 90% of them. That is thin cloud or haze beside the masked clouds. On
-  26 October 2023 the median snow index is 0.00 and 90% are under 0.23: patchy snow mixed with
-  stubble in each pixel.
+  snow index is below 0 for 90% of them. On 26 October 2023 the median snow index is 0.00 and 90%
+  are under 0.23. Step 1 saw snow on both dates by eye. A pixel that is partly snow and partly dark
+  stubble has a low snow index, and so does thin cloud or haze, so the index can't tell these apart.
 
 So the snow rule stays (it is standard and costs nothing), but the late-October problem is haze and
 partial snow, which no threshold here was tuned for. Step 3 records each field's blue reflectance and
