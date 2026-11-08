@@ -11,6 +11,10 @@ import java.time.MonthDay;
  * @param markerEdge        pixels whose season edge is below this are calm
  * @param markerShrink      pixels the calm mask is shrunk by before markers are taken from it
  * @param minMarkerPixels   calm areas smaller than this, after shrinking, seed no region
+ * @param lineRadius        half the length, in pixels, of the segments along which straight lines are
+ *                          looked for in the season edge (see {@link LineStrength})
+ * @param lineEdge          pixels whose line strength is at least this are not calm: their season edge
+ *                          is raised to at least {@code markerEdge}
  * @param ridgeWeak         neighbours merge only if the median ridge on their border is at most this
  * @param curveTolerance    neighbours merge only if the rank-th highest gap between their curves is at most this
  * @param minCommonDates    dates on which both neighbours need a value before they can merge
@@ -38,6 +42,8 @@ public record FieldParameters(
         double markerEdge,
         int markerShrink,
         int minMarkerPixels,
+        int lineRadius,
+        double lineEdge,
         double ridgeWeak,
         double curveTolerance,
         int minCommonDates,
@@ -58,7 +64,7 @@ public record FieldParameters(
         double simplifyMetres) {
 
     public static final FieldParameters DEFAULTS = new FieldParameters(
-            5.0, 3, 0.15, 2, 50, 0.2, 0.05, 5, 0.6, 5.0, 1.0, 5,
+            5.0, 3, 0.15, 2, 50, 35, 0.025, 0.2, 0.05, 5, 0.6, 5.0, 1.0, 5,
             MonthDay.of(6, 15), 0.3, 0.5, MonthDay.of(6, 20), 0.2, MonthDay.of(9, 30),
             0.3, 0.7, 0.05, 0.25, 10.0);
 
@@ -66,7 +72,7 @@ public record FieldParameters(
         if (edgeRank < 1) {
             throw new IllegalArgumentException("edgeRank must be at least 1, not " + edgeRank);
         }
-        if (markerShrink < 0 || minMarkerPixels < 1 || minCommonDates < 1 || minLabelDates < 1) {
+        if (markerShrink < 0 || minMarkerPixels < 1 || lineRadius < 1 || minCommonDates < 1 || minLabelDates < 1) {
             throw new IllegalArgumentException("Counts must be positive: " + this);
         }
     }

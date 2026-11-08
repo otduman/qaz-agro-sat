@@ -82,3 +82,11 @@ window and after it:
 Lines appearing after a cut is visible in 2024 and 2025, as the photo readings suggested. A level
 of line strength alone won't date a cut, because some fields have lines all season; its change will
 need to be read alongside SWIR and NDVI.
+
+## After the field-lines change (9 November 2026)
+
+Step 2 now also stops at faint straight borders (see "Faint straight borders" in the field-boundaries tuning
+log), and the series were rerun on the new field maps. The oversized regions above are gone: no field region is
+over 1,000 ha in any season. 29 boxes now lie wholly inside one field's interior (the new borders cross some
+boxes), and all 29 have a median gap under 0.05; the median of the median gaps is 0.007 and the largest 0.024.
+The figures above are from before the change and are kept as they were.

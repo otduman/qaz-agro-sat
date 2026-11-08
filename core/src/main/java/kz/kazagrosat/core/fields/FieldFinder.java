@@ -13,7 +13,8 @@ import kz.kazagrosat.core.raster.PixelGrid;
 /**
  * Finds a season's fields from that season's images alone:
  * <ol>
- *   <li>edge strength per date, gathered into the season edge;</li>
+ *   <li>edge strength per date, gathered into the season edge; pixels on long straight lines of it
+ *       ({@link LineStrength}) are raised to at least the calm level, so faint field borders stop markers;</li>
  *   <li>marker-based watershed on the season edge;</li>
  *   <li>per-region NDVI sums on every date (a second read of the season);</li>
  *   <li>merging of neighbours with weak borders and matching curves;</li>
@@ -44,7 +45,7 @@ public final class FieldFinder {
                     p.brightnessWeight()));
             progress.accept(String.format(Locale.ROOT, "Edges: %s (%d of %d)", dates.get(d), d + 1, dates.size()));
         }
-        float[] edges = gathered.result();
+        float[] edges = liftLines(gathered.result(), width, height, p);
 
         int[] watershed = Watershed.flood(edges, width, height, p);
         int regionCount = max(watershed);
@@ -122,6 +123,18 @@ public final class FieldFinder {
         FieldSummary summary = new FieldSummary(dates, regionCount, regionCount - mergedCount, dropped,
                 droppedPixels, holes.filled(), holes.filledPixels(), holes.kept(), noDataPixels, otherReasons);
         return new FieldMap(grid, labels, edges, List.copyOf(regions), summary);
+    }
+
+    /** Raises the season edge of pixels on a long straight line to at least the calm level. */
+    static float[] liftLines(float[] seasonEdges, int width, int height, FieldParameters p) {
+        float[] lines = LineStrength.of(seasonEdges, width, height, p.lineRadius());
+        float[] lifted = seasonEdges.clone();
+        for (int i = 0; i < lifted.length; i++) {
+            if (lines[i] >= p.lineEdge()) {
+                lifted[i] = (float) Math.max(lifted[i], p.markerEdge());
+            }
+        }
+        return lifted;
     }
 
     private static DateImage checked(DateImage image, int pixels) {
