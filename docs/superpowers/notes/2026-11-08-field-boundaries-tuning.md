@@ -100,3 +100,57 @@ share a random line would get:
 | 2024 -> 2025 | 70.2% | 16.2% |
 | 2025 -> 2023 | 51.7% | 11.9% |
 | 2023 -> 2025 | 69.3% | 16.2% |
+
+## After the freeze: two method fixes (8 November 2026, step 3)
+
+Two changes to the method itself were made at the start of step 3. Neither is a retune: every frozen
+value above stays as it is, and the reruns below were accepted whatever they showed.
+
+1. **Every marker starts flooding at once.** The flood used to start each marker at its own edge
+   level, so a calm but busy field middle started late. A quieter neighbour could then flood through a
+   gap in the ridge and take ground next to the busy field. The independent review of step 2 found this
+   (its finding M1). Test: `WatershedTest.aHigherMarkerKeepsTheBandBesideIt`.
+2. **Snow the cloud mask misses is not clear.** A pixel is snow when its snow index
+   (green - SWIR16) / (green + SWIR16) is at least 0.4 and its near-infrared at least 0.11, the standard
+   MODIS and Sentinel-2 rule. Tests: `SnowTestTest`, `StackImagesTest.aSnowyPixelIsNotClear`.
+
+**What the snow test catches: almost nothing.** Over all 143 stored dates it removes at most 0.55% of
+the pixels the cloud mask calls clear (on 2023-08-12; I have not looked at what they are), and next to none on the
+late-October dates. The expectation was the opposite, so I looked at why:
+- The cloud mask already flags full snow cover as its own snow class; for example 91,000 of its 20 m
+  pixels on 26 October 2023.
+- What does slip past is bright ground with a *low* snow index. On 27 October 2024 the pixels the mask
+  calls clear have a median green reflectance of 0.155, against about 0.065 two days earlier, yet their
+  snow index is below 0 for 90% of them. On 26 October 2023 the median snow index is 0.00 and 90%
+  are under 0.23. Step 1 saw snow on both dates by eye. A pixel that is partly snow and partly dark
+  stubble has a low snow index, and so does thin cloud or haze, so the index can't tell these apart.
+
+So the snow rule stays (it is standard and costs nothing), but the late-October problem is haze and
+partial snow, which no threshold here was tuned for. Step 3 records each field's blue reflectance and
+snow share per date so that step 4 can deal with them on evidence. (Snow share counts the mask's own snow
+and the snow test only where the mask sees no cloud, since ice cloud passes the snow test too. Turbid
+floodwater can pass it as well: some small fields in May 2024, a flood spring, are flagged. See the step 3
+results notes.)
+
+**Reruns with both fixes**, each under `java -Xmx1g`:
+
+| season | run time | regions | field | fallow | other | left out |
+|---|---|---|---|---|---|---|
+| 2025 | 46 s | 691 (was 685) | 315, 23,959 ha | 11, 661 ha | 365, 15,461 ha | 360.1 ha |
+| 2024 | 43 s | 520 (was 518) | 280, 25,736 ha | 13, 1,405 ha | 227, 12,896 ha | 403.1 ha |
+| 2023 | 45 s | 426 (was 433) | 212, 25,990 ha | 36, 2,645 ha | 178, 11,451 ha | 355.0 ha |
+
+(The runs are faster than the first ones. I did not look into why; the fixes themselves add a little work.)
+
+Boundaries barely moved. The share of the old boundary pixels within 20 m of the new ones is
+98.7% for 2025, 99.5% for 2024 and 98.5% for 2023.
+
+The box check is unchanged in every season: 3 of 4 and 24 of 30 for 2025, 6 of 7 and 21 of 27 for
+2024, 7 of 7 and 26 of 27 for 2023. Stability between seasons moved by at most 0.4 points:
+
+| from -> to | share | chance |
+|---|---|---|
+| 2025 -> 2024 | 60.2% | 13.8% |
+| 2024 -> 2025 | 70.4% | 16.3% |
+| 2025 -> 2023 | 51.3% | 11.8% |
+| 2023 -> 2025 | 69.7% | 16.3% |

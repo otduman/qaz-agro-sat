@@ -2,15 +2,11 @@ package kz.kazagrosat.pipeline.fields;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.AccessDeniedException;
 import java.nio.file.DirectoryStream;
-import java.nio.file.FileSystemException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.time.LocalDate;
 import java.time.MonthDay;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -38,8 +34,8 @@ import org.locationtech.jts.geom.Polygon;
  *   <li>{@code outlines-mid-season-<date>.png} and {@code outlines-post-harvest-<date>.png};</li>
  *   <li>{@code summary-<year>.txt}, every count of what was found and what was left out.</li>
  * </ul>
- * Every file is written under a temporary name first. Once all are ready they replace the old files
- * together: if any old file is held open by another program, none is replaced.
+ * They replace the old files all together through {@link OutputSwap}: if any old file is held open by
+ * another program, none is replaced.
  */
 public final class FieldOutputs {
 
@@ -49,8 +45,6 @@ public final class FieldOutputs {
     static final MonthDay MID_SEASON_TO = MonthDay.of(8, 15);
     static final MonthDay POST_HARVEST_FROM = MonthDay.of(9, 10);
     static final MonthDay POST_HARVEST_TO = MonthDay.of(10, 15);
-    private static final String PART = ".part";
-    private static final String OLD = ".old";
 
     private FieldOutputs() {}
 
@@ -69,71 +63,28 @@ public final class FieldOutputs {
         Optional<LocalDate> postHarvest =
                 FieldPictures.clearestIn(stack.entries(), POST_HARVEST_FROM, POST_HARVEST_TO);
 
-        Files.createDirectories(folder);
-        Map<Path, Path> parts = new LinkedHashMap<>();
-        try {
-            Path geojson = part(parts, folder, "fields-" + year + ".geojson");
+        try (OutputSwap swap = new OutputSwap(folder)) {
+            Path geojson = swap.part("fields-" + year + ".geojson");
             Map<Integer, Polygon> outlines =
                     RegionOutlines.simplify(RegionOutlines.trace(map.labels(), grid), p.simplifyMetres());
             FieldsGeoJson.write(geojson, map, outlines, year);
-            TiledTiffWriter.write(part(parts, folder, "fields-" + year + ".tif"), map.labels(), grid, 16, 0);
-            FieldPictures.edges(part(parts, folder, "edges-" + year + ".png"), map.seasonEdges(), grid.width(),
+            TiledTiffWriter.write(swap.part("fields-" + year + ".tif"), map.labels(), grid, 16, 0);
+            FieldPictures.edges(swap.part("edges-" + year + ".png"), map.seasonEdges(), grid.width(),
                     grid.height());
             if (midSeason.isPresent()) {
-                FieldPictures.preview(part(parts, folder, "outlines-mid-season-" + midSeason.get() + ".png"),
+                FieldPictures.preview(swap.part("outlines-mid-season-" + midSeason.get() + ".png"),
                         stack, midSeason.get(), map);
             }
             if (postHarvest.isPresent()) {
-                FieldPictures.preview(part(parts, folder, "outlines-post-harvest-" + postHarvest.get() + ".png"),
+                FieldPictures.preview(swap.part("outlines-post-harvest-" + postHarvest.get() + ".png"),
                         stack, postHarvest.get(), map);
             }
-            Files.writeString(part(parts, folder, "summary-" + year + ".txt"),
+            Files.writeString(swap.part("summary-" + year + ".txt"),
                     summary(stack, map, p, midSeason, postHarvest), StandardCharsets.UTF_8);
 
-            replaceAll(parts);
-            removeStalePictures(folder, parts.keySet());
-            return new ArrayList<>(parts.keySet());
-        } finally {
-            for (Path part : parts.values()) {
-                Files.deleteIfExists(part);
-            }
-        }
-    }
-
-    /**
-     * Puts every new file in place, or none: the old files are first moved aside, and if any of them
-     * can't be (another program holds it open), those already moved go back and nothing changes.
-     */
-    private static void replaceAll(Map<Path, Path> parts) throws IOException {
-        Map<Path, Path> asides = new LinkedHashMap<>();
-        try {
-            for (Path target : parts.keySet()) {
-                if (Files.exists(target)) {
-                    Path aside = target.resolveSibling(target.getFileName() + OLD);
-                    move(target, aside, target);
-                    asides.put(target, aside);
-                }
-            }
-            List<Path> placed = new ArrayList<>();
-            try {
-                for (Map.Entry<Path, Path> entry : parts.entrySet()) {
-                    move(entry.getValue(), entry.getKey(), entry.getKey());
-                    placed.add(entry.getKey());
-                }
-            } catch (IOException e) {
-                for (Path target : placed) {
-                    Files.deleteIfExists(target);
-                }
-                throw e;
-            }
-        } catch (IOException e) {
-            for (Map.Entry<Path, Path> entry : asides.entrySet()) {
-                Files.move(entry.getValue(), entry.getKey(), StandardCopyOption.ATOMIC_MOVE);
-            }
-            throw e;
-        }
-        for (Path aside : asides.values()) {
-            Files.deleteIfExists(aside);
+            List<Path> written = swap.commit();
+            removeStalePictures(folder, Set.copyOf(written));
+            return written;
         }
     }
 
@@ -147,28 +98,6 @@ public final class FieldOutputs {
                     Files.delete(picture);
                 }
             }
-        }
-    }
-
-    private static Path part(Map<Path, Path> parts, Path folder, String name) {
-        Path target = folder.resolve(name);
-        Path part = folder.resolve(name + PART);
-        parts.put(target, part);
-        return part;
-    }
-
-    /** Moves a file, explaining a refusal in terms of the output file it was for. */
-    private static void move(Path from, Path to, Path output) throws IOException {
-        try {
-            Files.move(from, to, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
-        } catch (AccessDeniedException e) {
-            throw new IOException("Cannot replace " + output + ": it is open in another program, such as QGIS. "
-                    + "Close it and run the same command again. No output was changed.", e);
-        } catch (FileSystemException e) {
-            // Renaming a file another program holds open is a sharing violation on Windows, not a denial.
-            throw new IOException("Cannot replace " + output + ": it is probably open in another program, such as "
-                    + "QGIS (the system says: " + e.getReason() + "). Close it and run the same command again. "
-                    + "No output was changed.", e);
         }
     }
 

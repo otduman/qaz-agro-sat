@@ -81,4 +81,25 @@ class StackImagesTest {
         assertFalse(image.clear()[40]);
         assertTrue(image.clear()[41]);
     }
+
+    @Test
+    void aSnowyPixelIsNotClear() throws Exception {
+        LocalDate date = LocalDate.parse("2025-10-27");
+        HandStack hand = new HandStack(folder).stored("2025-10-27", 2000); // every band 0.10
+        int snowy = 4 * 36 + 6;
+        int[] green = new int[36 * 30];
+        int[] nir = new int[36 * 30];
+        Arrays.fill(green, 2000);
+        Arrays.fill(nir, 2000);
+        green[snowy] = HandStack.dn(0.6);
+        nir[snowy] = HandStack.dn(0.55);
+        int[] swir16 = new int[18 * 15];
+        Arrays.fill(swir16, 2000);
+        hand.layer(date, Layer.GREEN, green).layer(date, Layer.NIR, nir).layer(date, Layer.SWIR16, swir16);
+
+        boolean[] clear = new StackImages(hand.finish()).read(date).clear();
+
+        assertFalse(clear[snowy], "snow index (0.6 - 0.1) / 0.7 = 0.71 and nir 0.55");
+        assertTrue(clear[snowy + 1], "the same 20 m swir pixel, but green 0.1 gives a snow index of 0");
+    }
 }
