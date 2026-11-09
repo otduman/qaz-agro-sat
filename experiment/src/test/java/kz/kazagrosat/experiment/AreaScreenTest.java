@@ -4,10 +4,13 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.LocalDate;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import kz.kazagrosat.core.geo.BoundingBox;
 import kz.kazagrosat.core.raster.PixelGrid;
+import org.locationtech.jts.geom.Geometry;
 import org.junit.jupiter.api.Test;
 
 class AreaScreenTest {
@@ -59,6 +62,19 @@ class AreaScreenTest {
 
         assertEquals(1.0, AreaScreen.sharesIn(grid, tile, new BoundingBox(60, 52, 61, 54)).cropland(), 1e-9);
         assertEquals(0.0, AreaScreen.sharesIn(grid, tile, new BoundingBox(61, 52, 63, 54)).cropland(), 1e-9);
+    }
+
+    @Test
+    void aSquareAcrossTwoTargetOblastsBelongsToTheOneHoldingItsCentre() {
+        Map<String, Geometry> oblasts = new LinkedHashMap<>();
+        oblasts.put("West", AreaScreen.polygon(new BoundingBox(60, 50, 61, 52)));
+        oblasts.put("East", AreaScreen.polygon(new BoundingBox(61, 50, 62, 52)));
+        oblasts.put("other:South", AreaScreen.polygon(new BoundingBox(60, 49, 62, 50)));
+
+        assertEquals(Optional.of("West"), AreaScreen.oblastOf(new BoundingBox(60.8, 51, 61.1, 51.2), oblasts));
+        assertEquals(Optional.of("East"), AreaScreen.oblastOf(new BoundingBox(60.9, 51, 61.2, 51.2), oblasts));
+        assertEquals(Optional.empty(), AreaScreen.oblastOf(new BoundingBox(60.5, 49.9, 60.8, 50.1), oblasts),
+                "partly outside the target oblasts");
     }
 
     @Test

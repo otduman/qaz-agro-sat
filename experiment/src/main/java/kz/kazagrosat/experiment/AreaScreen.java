@@ -243,13 +243,12 @@ public final class AreaScreen {
         List<Square> squares = new ArrayList<>();
         Map<String, List<BoundingBox>> byTile = new TreeMap<>();
         Map<BoundingBox, String> oblastOf = new LinkedHashMap<>();
+        Geometry targets = targets(oblasts);
         for (BoundingBox box : squares(60, 75, 48, 57)) {
-            Geometry polygon = polygon(box);
-            for (String oblast : OBLASTS) {
-                if (oblasts.get(oblast).covers(polygon)) {
-                    oblastOf.put(box, oblast);
-                    byTile.computeIfAbsent(worldCoverTile(box).orElseThrow(), t -> new ArrayList<>()).add(box);
-                }
+            Optional<String> oblast = oblastOf(box, oblasts, targets);
+            if (oblast.isPresent()) {
+                oblastOf.put(box, oblast.get());
+                byTile.computeIfAbsent(worldCoverTile(box).orElseThrow(), t -> new ArrayList<>()).add(box);
             }
         }
         String ourTile = worldCoverTile(OUR_AREA).orElseThrow();
@@ -340,6 +339,31 @@ public final class AreaScreen {
 
     static String label(BoundingBox box) {
         return String.format(Locale.ROOT, "%.2f-%.2f E, %.2f-%.2f N", box.west(), box.east(), box.south(), box.north());
+    }
+
+    /**
+     * The target oblast holding the square's centre, when the target oblasts together cover the whole
+     * square; a square may cross the border between two of them.
+     */
+    static Optional<String> oblastOf(BoundingBox box, Map<String, Geometry> oblasts) {
+        return oblastOf(box, oblasts, targets(oblasts));
+    }
+
+    private static Optional<String> oblastOf(BoundingBox box, Map<String, Geometry> oblasts, Geometry targets) {
+        if (!targets.covers(polygon(box))) {
+            return Optional.empty();
+        }
+        Geometry centre = GEOMETRY.createPoint(new Coordinate((box.west() + box.east()) / 2,
+                (box.south() + box.north()) / 2));
+        return oblasts.entrySet().stream()
+                .filter(e -> !e.getKey().startsWith("other:") && e.getValue().covers(centre))
+                .map(Map.Entry::getKey).findFirst();
+    }
+
+    /** The target oblasts together, as one shape. */
+    private static Geometry targets(Map<String, Geometry> oblasts) {
+        return GEOMETRY.buildGeometry(oblasts.entrySet().stream().filter(e -> !e.getKey().startsWith("other:"))
+                .map(Map.Entry::getValue).toList()).union();
     }
 
     static Polygon polygon(BoundingBox box) {
