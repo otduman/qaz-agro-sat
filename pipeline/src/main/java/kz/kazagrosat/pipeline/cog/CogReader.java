@@ -15,8 +15,8 @@ import kz.kazagrosat.core.raster.PixelWindow;
 
 /**
  * Reads pixel windows from the full-resolution image of a single-band, tiled GeoTIFF holding
- * unsigned integers or 32-bit floats, fetching only the tiles a window touches. Anything else is
- * rejected with a clear error rather than read wrongly.
+ * unsigned integers, signed 16-bit integers or 32-bit floats, fetching only the tiles a window
+ * touches. Anything else is rejected with a clear error rather than read wrongly.
  */
 public final class CogReader {
 
@@ -55,6 +55,7 @@ public final class CogReader {
     private static final int PREDICTOR_HORIZONTAL = 2;
     private static final int PREDICTOR_FLOATING_POINT = 3;
     private static final int SAMPLE_UNSIGNED = 1;
+    private static final int SAMPLE_SIGNED = 2;
     private static final int SAMPLE_FLOAT = 3;
     private static final int GEO_KEY_PROJECTED_CRS = 3072;
 
@@ -62,6 +63,7 @@ public final class CogReader {
     private final ByteOrder order;
     private final PixelGrid grid;
     private final boolean floating;
+    private final boolean signed;
     private final int bits;
     private final int compression;
     private final int predictor;
@@ -83,13 +85,17 @@ public final class CogReader {
             throw new IOException("Expected one band but the file has " + samples + " samples per pixel");
         }
         long sampleFormat = directory.number(TAG_SAMPLE_FORMAT, SAMPLE_UNSIGNED);
-        if (sampleFormat != SAMPLE_UNSIGNED && sampleFormat != SAMPLE_FLOAT) {
+        if (sampleFormat != SAMPLE_UNSIGNED && sampleFormat != SAMPLE_SIGNED && sampleFormat != SAMPLE_FLOAT) {
             throw new IOException("Unsupported sample format " + sampleFormat);
         }
         this.floating = sampleFormat == SAMPLE_FLOAT;
+        this.signed = sampleFormat == SAMPLE_SIGNED;
         this.bits = (int) directory.number(TAG_BITS, 1);
         if (floating ? bits != 32 : bits != 8 && bits != 16) {
             throw new IOException("Unsupported bit depth " + bits);
+        }
+        if (signed && bits != 16) {
+            throw new IOException("Unsupported signed " + bits + "-bit pixels; only signed 16-bit is read");
         }
         this.compression = (int) directory.number(TAG_COMPRESSION, COMPRESSION_NONE);
         if (compression != COMPRESSION_NONE && compression != COMPRESSION_DEFLATE
@@ -177,7 +183,7 @@ public final class CogReader {
         return grid;
     }
 
-    /** Returns the window's unsigned pixel values, row by row. */
+    /** Returns the window's integer pixel values, row by row: signed 16-bit files give negative values too. */
     public int[] readWindow(PixelWindow window) throws IOException, InterruptedException {
         if (floating) {
             throw new IllegalStateException("This file holds floats: use readFloatWindow");
@@ -279,6 +285,11 @@ public final class CogReader {
                 for (int x = 1; x < tileWidth; x++) {
                     samples[row + x] = (samples[row + x] + samples[row + x - 1]) & mask;
                 }
+            }
+        }
+        if (signed) {
+            for (int i = 0; i < samples.length; i++) {
+                samples[i] = (short) samples[i];
             }
         }
         return samples;

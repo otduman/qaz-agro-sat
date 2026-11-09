@@ -275,13 +275,40 @@ class CogReaderTest {
         assertTrue(error.getMessage().contains("bit depth " + bits), error.getMessage());
     }
 
+    @ParameterizedTest(name = "signed 16-bit compression={0} predictor={1}")
+    @CsvSource({"8, 2", "8, 1", "1, 1"})
+    void decodes16BitSignedTiles(int compression, int predictor) throws Exception {
+        // Laid out like NASA's HLS bands: signed 16-bit reflectance with -9999 as nodata. Crossing zero along the
+        // row makes the predictor's differences wrap.
+        byte[] file = new SyntheticTiff(8, 8, 4, 4)
+                .bits(16).sampleFormat(2).compression(compression).predictor(predictor).nodata("-9999")
+                .pixels((x, y) -> x * 300 - 600 + y)
+                .build();
+
+        int[] pixels = open(file).readWindow(new PixelWindow(1, 1, 5, 1));
+
+        assertArrayEquals(new int[] {-299, 1, 301, 601, 901}, pixels);
+    }
+
     @Test
-    void rejectsSignedIntegerPixels() {
-        byte[] file = tenBySeven().sampleFormat(2).build();
+    void fillsSparseSignedTilesWithANegativeNodata() throws Exception {
+        byte[] file = new SyntheticTiff(8, 8, 4, 4)
+                .bits(16).sampleFormat(2).nodata("-9999").sparseTile(1)
+                .pixels((x, y) -> -x)
+                .build();
+
+        int[] pixels = open(file).readWindow(new PixelWindow(3, 3, 2, 1));
+
+        assertArrayEquals(new int[] {-3, -9999}, pixels);
+    }
+
+    @Test
+    void rejectsSigned8BitPixels() {
+        byte[] file = tenBySeven().bits(8).sampleFormat(2).build();
 
         IOException error = assertThrows(IOException.class, () -> open(file));
 
-        assertTrue(error.getMessage().contains("sample format 2"), error.getMessage());
+        assertTrue(error.getMessage().contains("signed 8-bit"), error.getMessage());
     }
 
     @Test
