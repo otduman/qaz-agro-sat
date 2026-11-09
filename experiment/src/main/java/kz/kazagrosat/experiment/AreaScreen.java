@@ -161,11 +161,15 @@ public final class AreaScreen {
     }
 
     public static void main(String[] args) throws Exception {
-        if (args.length != 1) {
-            System.err.println("Usage: AreaScreen <dataFolder>");
+        if (args.length < 1) {
+            System.err.println("Usage: AreaScreen <dataFolder> [<name>=<west,south,east,north> ...]");
             System.exit(2);
         }
         Path folder = Path.of(args[0]).resolve("areas");
+        if (args.length > 1) {
+            measureOnly(folder, Arrays.copyOfRange(args, 1, args.length));
+            return;
+        }
         Map<String, Geometry> oblasts = loadOblasts(folder.resolve("kaz-adm1.geojson"));
         RetryingHttp http = new RetryingHttp(RetryPolicy.DEFAULT);
 
@@ -206,6 +210,32 @@ public final class AreaScreen {
         writeClouds(folder.resolve("clouds.csv"), clouds, names);
         printClouds(clouds, names);
         AreaMap.write(folder.resolve("map.png"), oblasts, squares, names);
+    }
+
+    /** Land and clouds for the named boxes only, added to clouds-extra.csv. */
+    private static void measureOnly(Path folder, String[] named) throws Exception {
+        RetryingHttp http = new RetryingHttp(RetryPolicy.DEFAULT);
+        StacClient stac = new StacClient(StacClient.EARTH_SEARCH, RetryPolicy.DEFAULT);
+        Map<Square, List<Clouds>> clouds = new LinkedHashMap<>();
+        Map<Square, String> names = new LinkedHashMap<>();
+        for (String arg : named) {
+            String name = arg.substring(0, arg.indexOf('='));
+            BoundingBox box = BoundingBox.parse(arg.substring(arg.indexOf('=') + 1));
+            URI uri = URI.create(String.format(Locale.ROOT, WORLDCOVER, worldCoverTile(box).orElseThrow()));
+            CogReader reader = CogReader.open(new HttpByteSource(uri, http), WORLDCOVER_80M);
+            PixelGrid grid = reader.grid();
+            int[] pixels = reader.readWindow(new PixelWindow(0, 0, grid.width(), grid.height()));
+            Square square = new Square("extra", box, sharesIn(grid, pixels, box));
+            Optional<List<Clouds>> measured = clouds(stac, http, box);
+            if (measured.isEmpty()) {
+                System.out.println(name + ": no single Sentinel-2 tile covers it");
+                continue;
+            }
+            clouds.put(square, measured.get());
+            names.put(square, name);
+        }
+        writeClouds(folder.resolve("clouds-extra.csv"), clouds, names);
+        printClouds(clouds, names);
     }
 
     private static List<Square> landShares(Map<String, Geometry> oblasts, RetryingHttp http)
