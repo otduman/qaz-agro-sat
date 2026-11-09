@@ -1,6 +1,7 @@
 package kz.kazagrosat.experiment;
 
 import java.util.Arrays;
+import java.util.function.IntPredicate;
 import kz.kazagrosat.core.raster.PixelGrid;
 import kz.kazagrosat.core.raster.PixelWindow;
 
@@ -83,10 +84,15 @@ final class LandsatGrid {
 
         /** @param qa the scene window's {@code qa_pixel}; {@code values} its bands, in this day's band order */
         void add(int[] lookup, int[] qa, float[][] values) {
+            add(lookup, qa, values, QaPixel::clear);
+        }
+
+        /** As {@link #add(int[], int[], float[][])}, with {@code isClear} reading the quality flags. */
+        void add(int[] lookup, int[] qa, float[][] values, IntPredicate isClear) {
             scenes++;
             for (int i = 0; i < clear.length; i++) {
                 int k = lookup[i];
-                if (clear[i] || k < 0 || !QaPixel.clear(qa[k])) {
+                if (clear[i] || k < 0 || !isClear.test(qa[k])) {
                     continue;
                 }
                 boolean complete = true;
