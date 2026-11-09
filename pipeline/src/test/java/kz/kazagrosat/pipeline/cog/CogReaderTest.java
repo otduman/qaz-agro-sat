@@ -53,6 +53,58 @@ class CogReaderTest {
     }
 
     @Test
+    void readsTheGridOfALonLatFile() throws Exception {
+        byte[] file = new SyntheticTiff(30, 20, 16, 16).bits(8).predictor(1)
+                .geo(4326, 63, 54, 0.001).geographic().build();
+
+        assertEquals(new PixelGrid(4326, 63, 54, 0.001, 30, 20), open(file).grid());
+    }
+
+    @Test
+    void readsAnOverviewOnTheFullImagesGroundWithLargerPixels() throws Exception {
+        SyntheticTiff half = new SyntheticTiff(10, 6, 4, 4).pixels((x, y) -> 1000 + y * 10 + x);
+        byte[] file = new SyntheticTiff(20, 12, 8, 8).geo(32641, 399960, 6000000, 20)
+                .pixels((x, y) -> y * 100 + x).overview(half).build();
+
+        CogReader overview = CogReader.open(new CountingSource(file), 1);
+
+        assertEquals(new PixelGrid(32641, 399960, 6000000, 40, 10, 6), overview.grid());
+        assertArrayEquals(new int[] {1034, 1035, 1044, 1045}, overview.readWindow(new PixelWindow(4, 3, 2, 2)));
+    }
+
+    @Test
+    void levelZeroIsTheFullImage() throws Exception {
+        byte[] file = new SyntheticTiff(20, 12, 8, 8).pixels((x, y) -> y * 100 + x)
+                .overview(new SyntheticTiff(10, 6, 4, 4)).build();
+
+        CogReader full = CogReader.open(new CountingSource(file), 0);
+
+        assertEquals(20, full.grid().width());
+        assertArrayEquals(new int[] {1105}, full.readWindow(new PixelWindow(5, 11, 1, 1)));
+    }
+
+    @Test
+    void walksAChainOfSeveralOverviews() throws Exception {
+        SyntheticTiff quarter = new SyntheticTiff(5, 3, 4, 4).pixels((x, y) -> 7);
+        SyntheticTiff half = new SyntheticTiff(10, 6, 4, 4).overview(quarter);
+        byte[] file = new SyntheticTiff(20, 12, 8, 8).geo(32641, 0, 120, 1).overview(half).build();
+
+        CogReader second = CogReader.open(new CountingSource(file), 2);
+
+        assertEquals(new PixelGrid(32641, 0, 120, 4, 5, 3), second.grid());
+        assertArrayEquals(new int[] {7}, second.readWindow(new PixelWindow(4, 2, 1, 1)));
+    }
+
+    @Test
+    void refusesAnOverviewLevelTheFileDoesNotHave() {
+        byte[] file = new SyntheticTiff(20, 12, 8, 8).overview(new SyntheticTiff(10, 6, 4, 4)).build();
+
+        IOException error = assertThrows(IOException.class, () -> CogReader.open(new CountingSource(file), 2));
+
+        assertTrue(error.getMessage().contains("2"), error.getMessage());
+    }
+
+    @Test
     void readsAWindowInsideOneTile() throws Exception {
         int[] pixels = open(tenBySeven().build()).readWindow(new PixelWindow(1, 1, 2, 2));
 
