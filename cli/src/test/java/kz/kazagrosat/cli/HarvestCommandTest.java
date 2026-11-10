@@ -52,9 +52,9 @@ class HarvestCommandTest {
                 harvest.toString());
 
         assertEquals(0, code, err.toString(StandardCharsets.UTF_8));
-        // The hand season has three dates from August: too few to date anything.
+        // The hand field's NDVI never passes 0.43, so it grew no crop; the thin strip has no readings at all.
         assertTrue(stdout().contains("Season:  2025, 2 fields: 0 dated, 0 cut in a cloud gap, 0 no cut found, "
-                + "2 unclear"), stdout());
+                + "1 unclear, 1 no crop seen"), stdout());
         assertTrue(stdout().contains("Screened: 0 dates"), stdout());
         assertTrue(Files.exists(harvest.resolve("harvest-2025.csv")));
         assertTrue(Files.exists(harvest.resolve("summary-2025.txt")));

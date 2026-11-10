@@ -31,7 +31,7 @@ import kz.kazagrosat.pipeline.cog.FileByteSource;
  * <ul>
  *   <li>{@code harvest-<year>.csv}, one row per field-labelled region;</li>
  *   <li>{@code harvest-<year>.tif}, 16-bit, the day of year of each field's cut (its window's middle), 0 where none;</li>
- *   <li>{@code harvest-<year>.png}, the same coloured by date, grey for no cut, white for unclear;</li>
+ *   <li>{@code harvest-<year>.png}, the same coloured by date, grey for no cut, white for unclear, sand for no crop seen;</li>
  *   <li>{@code summary-<year>.txt}, counts, screened dates and the volume checks.</li>
  * </ul>
  * Fallow regions are dated too, for the checks only: a cut found on fallow land is a false one.
@@ -104,6 +104,7 @@ public final class Harvest {
 
         return new HarvestReport(year, fieldCuts.size(), count(fieldCuts, Status.DATED),
                 count(fieldCuts, Status.CLOUD_GAP), count(fieldCuts, Status.NO_CUT), count(fieldCuts, Status.UNCLEAR),
+                count(fieldCuts, Status.NO_CROP),
                 full.screened().size(), List.copyOf(written));
     }
 
@@ -132,6 +133,7 @@ public final class Harvest {
     static int colour(FieldCut c, int year) {
         return switch (c.status()) {
             case NO_CUT -> 0xFF8C8C8C;
+            case NO_CROP -> 0xFFC8B89A;
             case UNCLEAR -> 0xFFFFFFFF;
             case DATED, CLOUD_GAP -> {
                 LocalDate first = LocalDate.of(year, 8, 1);

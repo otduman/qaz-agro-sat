@@ -19,6 +19,12 @@ public final class HarvestDater {
     public static final int MAX_WINDOW_DAYS = 10;
     /** Fewer usable readings than this from 1 August make a field unclear. */
     public static final int MIN_READINGS = 5;
+    /**
+     * A field whose NDVI never reached this from May to August grew no crop, so it has nothing to cut. Added
+     * 2026-11-11: bare soil drying in early August brightens like a cut (9 of 10 false cuts on bare fallow in the
+     * Tayynsha 2026 run); a crop canopy reaches 0.6-0.85. Judged on the Tayynsha 2025 run, which came later.
+     */
+    public static final double CROP_NDVI = 0.5;
 
     private HarvestDater() {}
 
@@ -26,7 +32,8 @@ public final class HarvestDater {
         DATED("dated"),
         CLOUD_GAP("cut in a cloud gap"),
         NO_CUT("no cut found"),
-        UNCLEAR("unclear");
+        UNCLEAR("unclear"),
+        NO_CROP("no crop seen");
 
         private final String label;
 
@@ -102,6 +109,11 @@ public final class HarvestDater {
 
     private static FieldCut cut(String field, List<Reading> readings) {
         int count = (int) readings.stream().filter(r -> r.date().getMonthValue() >= 8).count();
+        List<Reading> growing = readings.stream()
+                .filter(r -> r.date().getMonthValue() >= 5 && r.date().getMonthValue() <= 8).toList();
+        if (!growing.isEmpty() && growing.stream().allMatch(r -> r.ndvi() < CROP_NDVI)) {
+            return new FieldCut(field, Status.NO_CROP, null, null, Double.NaN, count);
+        }
         Optional<CutRule.Step> step = CutRule.biggestRise(readings);
         double rise = step.map(CutRule.Step::rise).orElse(Double.NaN);
         if (count < MIN_READINGS || step.isEmpty()) {

@@ -80,6 +80,30 @@ class SeasonScenesTest {
     }
 
     @Test
+    void whenNoTileEverCoversTheWholeAreaThePartlyCoveringScenesOfTheBestTileAreKept() {
+        // A pass edge runs through the area: one orbit sees its west part, another its east part, on other days.
+        StacItem west = scene("T41UMV", "2025-07-12T07:10:00Z", 5, new Envelope(62.0, 62.58, 53.0, 54.0));
+        StacItem east = scene("T41UMV", "2025-07-15T07:10:00Z", 5, new Envelope(62.52, 63.0, 53.0, 54.0));
+        StacItem sliver = scene("T41UNV", "2025-07-13T07:10:00Z", 1, new Envelope(62.68, 63.0, 53.0, 54.0));
+        StacItem tiny = scene("T41UMV", "2025-07-20T07:10:00Z", 1, new Envelope(62.0, 62.41, 53.0, 54.0));
+
+        SeasonScenes season = SeasonScenes.choose(List.of(west, east, sliver, tiny), AREA).orElseThrow();
+
+        assertEquals("T41UMV", season.tile());
+        assertEquals(List.of(west, east), season.scenes(), "a scene seeing under a tenth of the area is left out");
+        assertEquals(List.of(west, east), SeasonScenes.choose(List.of(west, east, sliver, tiny), AREA, "T41UMV")
+                .orElseThrow().scenes(), "a resumed download keeps them too");
+    }
+
+    @Test
+    void partlyCoveringScenesAreNotUsedWhenSomeDateCoversTheWholeArea() {
+        StacItem west = scene("T41UMV", "2025-07-12T07:10:00Z", 5, new Envelope(62.0, 62.58, 53.0, 54.0));
+        StacItem whole = covering("T41UMV", "2025-07-15T07:10:00Z", 5);
+
+        assertEquals(List.of(whole), SeasonScenes.choose(List.of(west, whole), AREA).orElseThrow().scenes());
+    }
+
+    @Test
     void isEmptyWhenNoSceneCoversTheArea() {
         StacItem elsewhere = scene("T41UMV", "2025-07-12T07:10:00Z", 1, new Envelope(70.0, 71.0, 50.0, 51.0));
 

@@ -26,12 +26,25 @@ public record SeasonScenes(String tile, List<StacItem> scenes) {
     /**
      * Keeps scenes covering the whole area, takes the tile that covers it on the most dates (ties go to
      * the alphabetically first tile), and per UTC date the least cloudy scene (ties go to the smaller id).
-     * Empty when no scene covers the area.
+     *
+     * <p>When no scene of any tile covers the whole area (a pass edge runs through it on every date), keeps the
+     * scenes that see at least {@link #MIN_PART} of it instead, on the tile whose scenes see the most of it over the
+     * season; the rest of each photo reads as no data, like cloud. Empty when no scene sees that much.
      */
     public static Optional<SeasonScenes> choose(List<StacItem> found, BoundingBox area) {
         Map<String, List<StacItem>> byTile = found.stream()
                 .filter(scene -> SceneSelector.covers(scene, area))
                 .collect(Collectors.groupingBy(SeasonScenes::tileOf, TreeMap::new, Collectors.toList()));
+        if (byTile.isEmpty()) {
+            Map<String, List<StacItem>> partly = found.stream()
+                    .filter(scene -> share(scene, area) >= MIN_PART)
+                    .collect(Collectors.groupingBy(SeasonScenes::tileOf, TreeMap::new, Collectors.toList()));
+            return partly.entrySet().stream()
+                    .max(Comparator.<Map.Entry<String, List<StacItem>>>comparingDouble(
+                                    e -> e.getValue().stream().mapToDouble(scene -> share(scene, area)).sum())
+                            .thenComparing(Map.Entry::getKey, Comparator.reverseOrder()))
+                    .map(entry -> new SeasonScenes(entry.getKey(), onePerDate(entry.getValue())));
+        }
         Optional<Map.Entry<String, List<StacItem>>> best = byTile.entrySet().stream()
                 .max(Comparator.<Map.Entry<String, List<StacItem>>>comparingLong(e -> distinctDates(e.getValue()))
                         .thenComparing(Map.Entry::getKey, Comparator.reverseOrder()));
@@ -46,7 +59,22 @@ public record SeasonScenes(String tile, List<StacItem> scenes) {
         List<StacItem> onTile = found.stream()
                 .filter(scene -> tileOf(scene).equals(tile) && SceneSelector.covers(scene, area))
                 .toList();
+        if (onTile.isEmpty() && found.stream().noneMatch(scene -> SceneSelector.covers(scene, area))) {
+            onTile = found.stream()
+                    .filter(scene -> tileOf(scene).equals(tile) && share(scene, area) >= MIN_PART)
+                    .toList();
+        }
         return onTile.isEmpty() ? Optional.empty() : Optional.of(new SeasonScenes(tile, onePerDate(onTile)));
+    }
+
+    /** A scene must see at least this share of the area to be kept when none sees all of it. */
+    public static final double MIN_PART = 0.1;
+
+    /** The share of the area's box inside the scene's data footprint. */
+    static double share(StacItem scene, BoundingBox area) {
+        org.locationtech.jts.geom.Geometry box = new org.locationtech.jts.geom.GeometryFactory().toGeometry(
+                new org.locationtech.jts.geom.Envelope(area.west(), area.east(), area.south(), area.north()));
+        return scene.footprint().intersection(box).getArea() / box.getArea();
     }
 
     private static long distinctDates(List<StacItem> scenes) {

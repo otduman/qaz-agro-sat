@@ -110,7 +110,7 @@ class DistrictJoinTest {
         String summary = Files.readString(district.resolve("district-summary-2026.txt"));
         assertTrue(summary.contains("Fields seen by two squares with the same cut window: 1 of 1"), summary);
         assertTrue(summary.contains("Squares joined: 2"), summary);
-        assertTrue(summary.contains("E480N5960 | 2 | 2 | 0 | 0 | 0 | 2026-09-05 | 0 of 3 | 2 of 2"), summary);
+        assertTrue(summary.contains("E480N5960 | 2 | 2 | 0 | 0 | 0 | 0 | 2026-09-05 | 0 of 3 | 2 of 2"), summary);
     }
 
     @Test
