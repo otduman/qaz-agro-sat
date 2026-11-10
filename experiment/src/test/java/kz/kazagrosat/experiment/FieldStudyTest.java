@@ -85,4 +85,53 @@ class FieldStudyTest {
         assertEquals(0.9 * 0.3 + 0.05, merged.get(1).swir16(), 1e-9);
         assertEquals(0.9, merged.get(1).clear(), 1e-9);
     }
+    private static String row(String field, String date, String satellite, double clear, double ndvi, double b11) {
+        return String.format(java.util.Locale.ROOT, "%s,%s,%.4f,%.4f,%.4f,%.4f,%s", field, date, clear, ndvi, b11,
+                0.1, satellite);
+    }
+
+    private static final String SERIES_HEADER = "field,date,clear_share,ndvi_median,b11,ndti,satellite";
+
+    @Test
+    void datesEveryFieldWithTheFrozenRule() {
+        List<String> series = new ArrayList<>(List.of(SERIES_HEADER));
+        String[] dates = {"2026-08-01", "2026-08-06", "2026-08-11", "2026-08-16", "2026-08-21", "2026-08-26"};
+        for (int i = 0; i < dates.length; i++) {
+            series.add(row("F1", dates[i], "S2", 1.0, 0.30, i < 3 ? 0.22 - i * 0.01 : 0.29));
+            series.add(row("F2", dates[i], "S2", 1.0, 0.30, 0.20 + i * 0.002));
+            series.add(row("F3", dates[i], "S2", 1.0, 0.70, i < 3 ? 0.22 - i * 0.01 : 0.29));
+        }
+
+        List<FieldStudy.FieldDate> found = FieldStudy.dateAll(series);
+
+        assertEquals(List.of("F1", "F2", "F3"), found.stream().map(FieldStudy.FieldDate::field).toList());
+        FieldStudy.FieldDate cut = found.get(0);
+        assertEquals("dated", cut.status());
+        assertEquals(LocalDate.parse("2026-08-11"), cut.before());
+        assertEquals(LocalDate.parse("2026-08-16"), cut.after());
+        assertEquals(8.0, cut.rise(), 1e-6);
+        assertEquals("no cut found", found.get(1).status());
+        assertEquals("never ripe", found.get(2).status(), "NDVI never fell below 0.4");
+        assertEquals(null, found.get(2).before());
+    }
+
+    @Test
+    void landsatFillsDatesSentinelLacksAndCloudyDatesAreSkipped() {
+        List<String> series = new ArrayList<>(List.of(SERIES_HEADER,
+                row("F1", "2026-08-01", "S2", 1.0, 0.30, 0.22),
+                row("F1", "2026-08-06", "S2", 1.0, 0.30, 0.21),
+                row("F1", "2026-08-11", "S2", 1.0, 0.30, 0.20),
+                row("F1", "2026-08-11", "LC09", 1.0, 0.30, 0.40),
+                row("F1", "2026-08-14", "LC08", 1.0, 0.30, 0.29),
+                row("F1", "2026-08-15", "S2", 0.50, 0.30, 0.20),
+                row("F1", "2026-08-21", "S2", 1.0, 0.30, 0.29),
+                row("F1", "2026-08-26", "S2", 1.0, 0.30, 0.29)));
+        series.add("F1,2026-08-18,0.2000,,,,S2");
+
+        FieldStudy.FieldDate cut = FieldStudy.dateAll(series).get(0);
+
+        assertEquals("dated", cut.status());
+        assertEquals(LocalDate.parse("2026-08-11"), cut.before(), "the Landsat row on a Sentinel-2 date is ignored");
+        assertEquals(LocalDate.parse("2026-08-14"), cut.after(), "the Landsat date narrows the step");
+    }
 }

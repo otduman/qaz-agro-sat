@@ -38,7 +38,11 @@ import kz.kazagrosat.pipeline.stack.SeasonStack;
  * FieldStudy pick   &lt;dataFolder&gt; &lt;year&gt; &lt;picks.csv&gt;
  * FieldStudy strips &lt;dataFolder&gt; &lt;year&gt; &lt;picks.csv&gt; &lt;outFolder&gt;
  * FieldStudy score  &lt;dataFolder&gt; &lt;year&gt; &lt;readings.csv&gt; [&lt;landsatFit.csv&gt;]
+ * FieldStudy date   &lt;dataFolder&gt; &lt;year&gt; &lt;out.csv&gt;
  * </pre>
+ *
+ * {@code date} runs the frozen rule on every field of {@code series-landsat-<year>}: Sentinel-2 rows, plus Landsat
+ * rows (already on the Sentinel-2 scale) on dates Sentinel-2 has no row for.
  *
  * The rule is the experiment's, unchanged; its input differs in one way: a field's reading is the median over its
  * interior (step 3), where the experiment used the mean of a 60-pixel box.
@@ -58,6 +62,52 @@ public final class FieldStudy {
     private static final int MARGIN = 12;
 
     record Pick(String id, String kind) {}
+
+    /**
+     * One field's cut as the frozen rule dates it: between {@code before} and {@code after}. Status {@code dated}
+     * (a rise of at least {@link Analysis#SWIR_JUMP}), {@code no cut found} (ripe, but no such rise) or
+     * {@code never ripe} (too few clear ripe dates to compare); the last two have no dates.
+     */
+    record FieldDate(String field, String status, LocalDate before, LocalDate after, double rise) {}
+
+    /** Every field of a series CSV, in the order they first appear, dated by the frozen rule. */
+    static List<FieldDate> dateAll(List<String> seriesCsv) {
+        List<String> header = List.of(seriesCsv.get(0).split(","));
+        int clear = header.indexOf("clear_share");
+        int ndvi = header.indexOf("ndvi_median");
+        int b11 = header.indexOf("b11");
+        int satellite = header.indexOf("satellite");
+        Map<String, TreeMap<LocalDate, Analysis.OpticalRow>> sentinel = new LinkedHashMap<>();
+        Map<String, TreeMap<LocalDate, Analysis.OpticalRow>> landsat = new HashMap<>();
+        for (String line : seriesCsv.subList(1, seriesCsv.size())) {
+            String[] cells = line.split(",", -1);
+            sentinel.computeIfAbsent(cells[0], k -> new TreeMap<>());
+            if (cells[ndvi].isEmpty() || cells[b11].isEmpty()) {
+                continue;
+            }
+            boolean isSentinel = satellite < 0 || cells[satellite].isEmpty() || cells[satellite].equals("S2");
+            LocalDate date = LocalDate.parse(cells[1]);
+            (isSentinel ? sentinel : landsat).computeIfAbsent(cells[0], k -> new TreeMap<>()).put(date,
+                    new Analysis.OpticalRow(cells[0], date, Double.parseDouble(cells[clear]),
+                            Double.parseDouble(cells[ndvi]), Double.NaN, Double.parseDouble(cells[b11])));
+        }
+        List<FieldDate> dates = new ArrayList<>();
+        sentinel.forEach((field, rows) -> {
+            TreeMap<LocalDate, Analysis.OpticalRow> merged = new TreeMap<>(landsat.getOrDefault(field, new TreeMap<>()));
+            merged.putAll(rows);
+            List<Analysis.OpticalRow> clearRows = merged.values().stream()
+                    .filter(row -> row.clear() >= Analysis.MIN_CLEAR).toList();
+            Optional<Analysis.Step> jump = Analysis.swirJump(clearRows);
+            if (jump.isEmpty()) {
+                dates.add(new FieldDate(field, "never ripe", null, null, Double.NaN));
+            } else if (jump.get().size() < Analysis.SWIR_JUMP) {
+                dates.add(new FieldDate(field, "no cut found", null, null, jump.get().size()));
+            } else {
+                dates.add(new FieldDate(field, "dated", jump.get().before(), jump.get().after(), jump.get().size()));
+            }
+        });
+        return dates;
+    }
 
     private FieldStudy() {}
 
@@ -139,7 +189,7 @@ public final class FieldStudy {
 
     public static void main(String[] args) throws Exception {
         if (args.length < 4) {
-            System.err.println("Usage: FieldStudy pick|strips|score <dataFolder> <year> ...");
+            System.err.println("Usage: FieldStudy pick|strips|score|date <dataFolder> <year> ...");
             System.exit(2);
         }
         Path data = Path.of(args[1]);
@@ -155,6 +205,19 @@ public final class FieldStudy {
             }
             case "strips" -> strips(data, year, Path.of(args[3]), Path.of(args[4]));
             case "score" -> score(data, year, Path.of(args[3]), args.length > 4 ? Path.of(args[4]) : null);
+            case "date" -> {
+                List<FieldDate> dates = dateAll(Files.readAllLines(
+                        data.resolve("series-landsat-" + year).resolve("series-" + year + ".csv")));
+                List<String> lines = new ArrayList<>(List.of("field,status,before,after,rise"));
+                for (FieldDate d : dates) {
+                    lines.add(String.format(Locale.ROOT, "%s,%s,%s,%s,%s", d.field(), d.status(),
+                            d.before() == null ? "" : d.before(), d.after() == null ? "" : d.after(),
+                            Double.isNaN(d.rise()) ? "" : String.format(Locale.ROOT, "%.2f", d.rise())));
+                }
+                Files.write(Path.of(args[3]), lines);
+                System.out.println(dates.size() + " fields, "
+                        + dates.stream().filter(d -> d.status().equals("dated")).count() + " dated");
+            }
             default -> throw new IllegalArgumentException("Unknown command " + args[0]);
         }
     }
