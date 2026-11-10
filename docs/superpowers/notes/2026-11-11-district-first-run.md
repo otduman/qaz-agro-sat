@@ -53,7 +53,7 @@ the 90th percentile) against 0.00 (+0.12) on other date pairs. Not used; a textu
 ## Holders and the two-season lead list
 
 Plot cards read in the owner's Chrome for three squares: E560N5960 (79% of field area), E520N5960 (78%), E540N5960
-(51% so far). `tools/holders.py` -> `holders.csv`; `tools/lead_list.py ... 2026 2025` -> `lead-list.csv`. Names stay
+(76%). `tools/holders.py` -> `holders.csv`; `tools/lead_list.py ... 2026 2025` -> `lead-list.csv`. Names stay
 in `data/`. Of 22 companies with a counted season, two are late in both seasons with sizable area (about 5,600 ha:
 +5 and +10 days behind neighbours within 20 km; about 3,800 ha: +11 and +4); the largest (about 13,300 ha) is early in
 both (-13, -15). Several companies are late in one season only (e.g. +21 then 0).
