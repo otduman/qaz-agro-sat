@@ -85,6 +85,56 @@ class LateScreenTest {
         assertTrue(LateScreen.screen(area).isEmpty(), "brighter from then on, as after a harvest of everything");
     }
 
+    private static void setB11(Map<String, List<Reading>> area, int field, int date, double b11) {
+        List<Reading> rows = area.get("F" + field);
+        Reading r = rows.get(date);
+        rows.set(date, new Reading(r.date(), r.satellite(), r.clear(), r.ndvi(), b11, r.blue(), r.snow()));
+    }
+
+    @Test
+    void anAreaWideDipInShortwaveIsWetGround() {
+        Map<String, List<Reading>> area = area();
+        for (int f = 0; f < 10; f++) {
+            setB11(area, f, 3, 0.21);
+        }
+
+        Map<LocalDate, String> dropped = LateScreen.screen(area);
+
+        assertEquals(List.of(START.plusDays(15)), List.copyOf(dropped.keySet()), "0.25 to 0.21 and back: 4 points");
+        assertTrue(dropped.values().iterator().next().contains("wet"), dropped.toString());
+    }
+
+    @Test
+    void aWetSpellOverTwoDatesIsDroppedButNotOverThree() {
+        Map<String, List<Reading>> two = area();
+        Map<String, List<Reading>> three = area();
+        for (int f = 0; f < 10; f++) {
+            setB11(two, f, 3, 0.20);
+            setB11(two, f, 4, 0.21);
+            for (int d = 3; d < 6; d++) {
+                setB11(three, f, d, 0.20);
+            }
+        }
+
+        assertEquals(List.of(START.plusDays(15), START.plusDays(20)), List.copyOf(LateScreen.screen(two).keySet()));
+        assertTrue(LateScreen.screen(three).isEmpty(), "three dark dates in a row are a change, not a spell");
+    }
+
+    @Test
+    void aSmallDipOrALastingRiseInShortwaveIsKept() {
+        Map<String, List<Reading>> small = area();
+        Map<String, List<Reading>> harvest = area();
+        for (int f = 0; f < 10; f++) {
+            setB11(small, f, 3, 0.22);
+            for (int d = 4; d < 8; d++) {
+                setB11(harvest, f, d, 0.30);
+            }
+        }
+
+        assertTrue(LateScreen.screen(small).isEmpty(), "3 points is under the cut threshold");
+        assertTrue(LateScreen.screen(harvest).isEmpty(), "everything cut at once is not a dip");
+    }
+
     @Test
     void datesWithFewClearFieldsAreNeitherJudgedNorUsedAsNeighbours() {
         Map<String, List<Reading>> area = area();

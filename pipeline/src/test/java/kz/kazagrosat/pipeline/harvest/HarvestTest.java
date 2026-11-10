@@ -94,7 +94,8 @@ class HarvestTest {
 
         String summary = Files.readString(folder.resolve("out").resolve("summary-2025.txt"));
         assertTrue(summary.contains("dated: 1 fields, 16 ha"), summary);
-        assertTrue(summary.contains("Fallow regions with a cut found: 0 of 1"), summary);
+        assertTrue(summary.contains("Bare fallow (NDVI never above 0.3 from August) with a cut found: 0 of 1"), summary);
+        assertTrue(summary.contains("Other fallow (green at some point from August) with a cut found: 0 of 0"), summary);
         assertTrue(summary.contains("Sentinel-2 alone agrees: 1 of 1"), summary);
         assertTrue(summary.contains("Screened dates: none"), summary);
         assertTrue(summary.contains("Half of the dated area cut by: 2025-08-13"), summary);

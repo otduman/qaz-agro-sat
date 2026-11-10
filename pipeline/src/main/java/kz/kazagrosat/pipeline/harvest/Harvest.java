@@ -98,7 +98,7 @@ public final class Harvest {
         }
         written.add(png);
         Path summary = out.resolve("summary-" + year + ".txt");
-        Files.writeString(summary, summary(year, fieldCuts, fallowCuts, alone, full.screened(), dated),
+        Files.writeString(summary, summary(year, fieldCuts, fallowCuts, alone, full.screened(), dated, rows),
                 StandardCharsets.UTF_8);
         written.add(summary);
 
@@ -150,8 +150,17 @@ public final class Harvest {
         };
     }
 
+    /** Fallow that never greened above this NDVI from August is a control: it has nothing to cut. */
+    static final double BARE_NDVI = 0.3;
+
+    private static boolean bare(List<Reading> readings) {
+        return readings.stream().filter(r -> r.date().getMonthValue() >= 8 && r.clear() >= 0.85)
+                .allMatch(r -> !(r.ndvi() > BARE_NDVI));
+    }
+
     static String summary(int year, List<FieldCut> fields, List<FieldCut> fallow, Map<String, FieldCut> alone,
-                          Map<LocalDate, String> screened, Map<String, SeriesTable.Field> info) {
+                          Map<LocalDate, String> screened, Map<String, SeriesTable.Field> info,
+                          Map<String, List<Reading>> rows) {
         StringBuilder s = new StringBuilder();
         line(s, "Season %d: %d field regions dated by the frozen cut rule (Sentinel-2 and Landsat, late-photo screen)",
                 year, fields.size());
@@ -175,8 +184,12 @@ public final class Harvest {
         }
         line(s, "");
         line(s, "Checks");
-        long fallowCut = fallow.stream().filter(c -> c.from() != null).count();
-        line(s, "  Fallow regions with a cut found: %d of %d", fallowCut, fallow.size());
+        List<FieldCut> bare = fallow.stream().filter(c -> bare(rows.get(c.field()))).toList();
+        List<FieldCut> greened = fallow.stream().filter(c -> !bare(rows.get(c.field()))).toList();
+        line(s, "  Bare fallow (NDVI never above %.1f from August) with a cut found: %d of %d", BARE_NDVI,
+                bare.stream().filter(c -> c.from() != null).count(), bare.size());
+        line(s, "  Other fallow (green at some point from August) with a cut found: %d of %d",
+                greened.stream().filter(c -> c.from() != null).count(), greened.size());
         int both = 0;
         int agree = 0;
         for (FieldCut c : fields) {
