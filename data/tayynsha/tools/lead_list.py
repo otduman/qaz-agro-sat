@@ -46,6 +46,40 @@ def km(lat1, lon1, lat2, lon2):
     return math.hypot((lat1 - lat2) * 111.2, (lon1 - lon2) * 111.2 * math.cos(math.radians((lat1 + lat2) / 2)))
 
 
+def owners(district, ref_year, holders, year):
+    """(square, field id of `year`) -> holder: the reference season's holders, carried to other seasons by pixel
+    overlap (a field takes the holder covering at least SHARE of it)."""
+    squares = {sq for sq, _ in holders}
+    # Map this season's fields to reference-season holders, square by square, by pixel overlap.
+    owner = {}
+    for sq in squares:
+        if year == ref_year:
+            for (s, f), h in holders.items():
+                if s == sq:
+                    owner[(sq, f)] = h
+            continue
+        ref = tifffile.imread(f'{district}/{sq}/fields-{ref_year}/fields-{ref_year}.tif').astype(np.int64)
+        cur = tifffile.imread(f'{district}/{sq}/fields-{year}/fields-{year}.tif').astype(np.int64)
+        hid = {}
+        for (s, f), h in holders.items():
+            if s == sq:
+                hid[int(f.split('-F')[1])] = h
+        names = sorted(set(hid.values()))
+        lut = np.zeros(int(ref.max()) + 1, dtype=np.int64)
+        for region, h in hid.items():
+            if region < len(lut):
+                lut[region] = names.index(h) + 1
+        href = lut[ref]
+        pair = np.zeros((int(cur.max()) + 1, len(names) + 1))
+        np.add.at(pair, (cur.ravel(), href.ravel()), 1)
+        tot = pair.sum(axis=1)
+        for k in range(1, pair.shape[0]):
+            best = int(pair[k, 1:].argmax()) + 1 if len(names) else 0
+            if best and pair[k, best] >= SHARE * tot[k]:
+                owner[(sq, f'{year}-F{k:04d}')] = names[best - 1]
+    return owner
+
+
 def main():
     district, ref_year, holders_csv = sys.argv[1], int(sys.argv[2]), sys.argv[3]
     years = [int(y) for y in sys.argv[4:]]
@@ -59,33 +93,7 @@ def main():
     rows = []
     for year in years:
         table = list(csv.DictReader(open(f'{district}/district-harvest-{year}.csv', encoding='utf-8')))
-        # Map this season's fields to reference-season holders, square by square, by pixel overlap.
-        owner = {}
-        for sq in squares:
-            if year == ref_year:
-                for (s, f), h in holders.items():
-                    if s == sq:
-                        owner[(sq, f)] = h
-                continue
-            ref = tifffile.imread(f'{district}/{sq}/fields-{ref_year}/fields-{ref_year}.tif').astype(np.int64)
-            cur = tifffile.imread(f'{district}/{sq}/fields-{year}/fields-{year}.tif').astype(np.int64)
-            hid = {}
-            for (s, f), h in holders.items():
-                if s == sq:
-                    hid[int(f.split('-F')[1])] = h
-            names = sorted(set(hid.values()))
-            lut = np.zeros(int(ref.max()) + 1, dtype=np.int64)
-            for region, h in hid.items():
-                if region < len(lut):
-                    lut[region] = names.index(h) + 1
-            href = lut[ref]
-            pair = np.zeros((int(cur.max()) + 1, len(names) + 1))
-            np.add.at(pair, (cur.ravel(), href.ravel()), 1)
-            tot = pair.sum(axis=1)
-            for k in range(1, pair.shape[0]):
-                best = int(pair[k, 1:].argmax()) + 1 if len(names) else 0
-                if best and pair[k, best] >= SHARE * tot[k]:
-                    owner[(sq, f'{year}-F{k:04d}')] = names[best - 1]
+        owner = owners(district, ref_year, holders, year)
         fields = []
         for r in table:
             if r['land'] != 'field':

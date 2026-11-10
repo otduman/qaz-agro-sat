@@ -23,3 +23,19 @@ are within chance (24-80%). One hint, not a finding: 7 tests, one season.
 
 Crop type (peas and barley are cut before wheat, oilseeds after; a farm's crop mix moves its dates), more holders
 (three squares), a fair duration test on 2025, and any ground truth.
+
+## Duration, done properly (`tools/duration.py`, tests `tools/test_duration.py`)
+
+Per holder and season with 5+ dated fields: 10%-90% span of dated area against 1,000 random same-size groups drawn
+from dated fields of other holders within 20 km (`duration.csv`).
+
+- 2026: 9 holders tested, 1 longer than chance at 0.1 (0.9 expected by chance). 2025: 12 tested, 0 (1.2 expected).
+- 9 holders tested in both: correlation of (span - neighbours' span) between years -0.42; none longer than
+  neighbours in both years.
+- The 2026 hint does not repeat: the largest company took 46 days against 27 for its neighbours in 2026 (chance 0.0),
+  but 31 against 47 in 2025 (chance 0.99, faster than nearly all random groups).
+
+So with the current data neither lateness nor duration picks out the same holders twice. Likely reasons, in order:
+crop rotation (a company's crop mix, and so its dates, changes every year); half the field area is undated and the
+undated half is not random (gradual cuts); the large holders are themselves most of their neighbourhood; several
+holders share a naming pattern that suggests one parent group sharing machines (a guess, not checked).
