@@ -37,6 +37,9 @@ import kz.kazagrosat.pipeline.stac.SceneSelector;
 import kz.kazagrosat.pipeline.stac.StacClient;
 import kz.kazagrosat.pipeline.stac.StacItem;
 import kz.kazagrosat.pipeline.stac.StacSearch;
+import kz.kazagrosat.core.geo.DistrictPlan;
+import kz.kazagrosat.pipeline.district.District;
+import kz.kazagrosat.pipeline.district.DistrictRunner;
 import kz.kazagrosat.pipeline.harvest.Harvest;
 import kz.kazagrosat.pipeline.harvest.HarvestReport;
 import kz.kazagrosat.pipeline.landsat.LandsatAdjustment;
@@ -89,6 +92,15 @@ public final class Main {
                   haze over the whole area. Writes a CSV, a day-of-year GeoTIFF, a map
                   and a summary with checks.
 
+              district plan --boundary FILE --out FOLDER
+                  Splits the district outlined in a GeoJSON file into squares of about
+                  20 x 20 km, each inside one Sentinel-2 tile, overlapping by 1 km.
+
+              district run --district FOLDER --year YYYY [--squares ID,ID]
+                  Runs season, fields, landsat, series and harvest for every square (or
+                  the ones listed), one at a time, skipping squares already done. Logs
+                  time and disk per step in FOLDER/run-YYYY.csv.
+
             The scenes, ndvi, season and landsat commands accept --stac-url URL to use
             a different STAC API; landsat also takes --token-url URL.
             """;
@@ -139,6 +151,9 @@ public final class Main {
     private static Command parse(String[] args) {
         if (args.length == 0) {
             throw new IllegalArgumentException("No command given");
+        }
+        if (args[0].equals("district")) {
+            return district(args);
         }
         Map<String, String> options = parseOptions(args);
         URI stacUri = options.containsKey(STAC_URL) ? URI.create(options.get(STAC_URL)) : StacClient.EARTH_SEARCH;
@@ -210,6 +225,52 @@ public final class Main {
                 yield (out, err) -> harvest(seriesFolder, fields, folder, out, err);
             }
             default -> throw new IllegalArgumentException("Unknown command: " + args[0]);
+        };
+    }
+
+    private static Command district(String[] args) {
+        if (args.length < 2 || args[1].startsWith("--")) {
+            throw new IllegalArgumentException("district needs plan or run, such as: district plan --boundary FILE"
+                    + " --out FOLDER");
+        }
+        String[] rest = java.util.Arrays.copyOfRange(args, 1, args.length);
+        Map<String, String> options = parseOptions(rest);
+        return switch (args[1]) {
+            case "plan" -> {
+                allowOnly(options, Set.of("--boundary", "--out"));
+                Path boundary = Path.of(require(options, "--boundary"));
+                Path folder = Path.of(require(options, "--out"));
+                yield (out, err) -> {
+                    List<DistrictPlan.Square> squares = District.plan(boundary, folder);
+                    double inside = squares.stream().mapToDouble(DistrictPlan.Square::shareInside).sum();
+                    out.println(text("Squares: %d of about 20 x 20 km (%.1f squares' worth inside the district)",
+                            squares.size(), inside));
+                    out.println("Wrote:   " + folder.resolve(District.PLAN));
+                    return 0;
+                };
+            }
+            case "run" -> {
+                allowOnly(options, Set.of("--district", "--year", "--squares"));
+                Path folder = Path.of(require(options, "--district"));
+                int year = parseYear(require(options, "--year"));
+                List<String> only = options.containsKey("--squares")
+                        ? List.of(options.get("--squares").split(",")) : List.of();
+                yield (out, err) -> {
+                    DistrictRunner.Report report = DistrictRunner.run(folder, year, only, (stepArgs, log) -> {
+                        try (PrintStream stepOut = new PrintStream(java.nio.file.Files.newOutputStream(log), true,
+                                java.nio.charset.StandardCharsets.UTF_8)) {
+                            return run(stepArgs, stepOut, stepOut);
+                        }
+                    }, err::println);
+                    out.println(text("Squares: %d done, %d already done, %d failed", report.done().size(),
+                            report.skipped().size(), report.failed().size()));
+                    report.failed().forEach((id, why) -> out.println("  " + id + ": " + why));
+                    out.println("Log:     " + folder.resolve("run-" + year + ".csv"));
+                    return report.failed().isEmpty() ? 0 : 1;
+                };
+            }
+            default -> throw new IllegalArgumentException("Unknown district command: " + args[1]
+                    + ". Use plan or run.");
         };
     }
 
