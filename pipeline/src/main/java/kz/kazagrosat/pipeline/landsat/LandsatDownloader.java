@@ -33,8 +33,8 @@ import kz.kazagrosat.pipeline.stack.StackArea;
 /**
  * Downloads a season's Landsat 8 and 9 scenes of a stack's area into a {@link LandsatFolder}: Collection 2 level 2
  * from Planetary Computer, free with an anonymous token. For each scene, the window of its 30 m grid that the area's
- * 10 m pixel centres fall in; the quality layer always, the six bands only when at least {@link #MIN_CLEAR_SHARE} of
- * the area is clear. Scenes already in the index with their files on disk are not downloaded again.
+ * 10 m pixel centres fall in; the quality layer always, the six bands only when any of the area is clear. (A share
+ * of the area is the wrong test: 1% of a 20 x 20 km area is about 400 ha, room for several whole fields.) Scenes already in the index with their files on disk are not downloaded again.
  */
 public final class LandsatDownloader {
 
@@ -42,8 +42,6 @@ public final class LandsatDownloader {
     public static final URI PLANETARY_TOKEN =
             URI.create("https://planetarycomputer.microsoft.com/api/sas/v1/token/landsat-c2-l2");
     public static final String COLLECTION = "landsat-c2-l2";
-    /** Below this clear share of the area, a scene keeps only its quality layer. */
-    public static final double MIN_CLEAR_SHARE = 0.01;
     private static final Set<String> SATELLITES = Set.of("LC08", "LC09");
 
     private final StacClient stac;
@@ -161,7 +159,7 @@ public final class LandsatDownloader {
         }
         Path sceneFolder = folder.resolve(item.id());
         Files.createDirectories(sceneFolder);
-        LandsatEntry.Status status = clearShare >= MIN_CLEAR_SHARE
+        LandsatEntry.Status status = clear > 0
                 ? LandsatEntry.Status.STORED : LandsatEntry.Status.CLOUDY;
         if (status == LandsatEntry.Status.STORED) {
             for (String band : LandsatFolder.BANDS) {

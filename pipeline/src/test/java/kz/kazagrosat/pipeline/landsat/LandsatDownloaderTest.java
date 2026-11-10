@@ -68,7 +68,7 @@ class LandsatDownloaderTest {
         int[] expected = new int[13 * 11];
         Arrays.fill(expected, FakePlanetaryComputer.dn("red"));
         assertArrayEquals(expected, red.values());
-        assertEquals(1, report.stored());
+        assertEquals(2, report.stored(), "the clear scene and the one clear in a corner");
         assertEquals(AREA, landsat.area());
     }
 
@@ -102,10 +102,10 @@ class LandsatDownloaderTest {
     void landsat7AndScenesInAnotherZoneAreLeftOut() throws Exception {
         LandsatReport report = download(AREA);
 
-        assertEquals(4, report.found());
+        assertEquals(5, report.found());
         assertEquals(1, report.landsat7());
         assertEquals(List.of(FakePlanetaryComputer.OTHER_ZONE), report.otherZone());
-        assertEquals(2, LandsatFolder.open(folder).entries().size());
+        assertEquals(3, LandsatFolder.open(folder).entries().size());
         assertFalse(Files.exists(folder.resolve(FakePlanetaryComputer.LANDSAT_7)));
         assertFalse(Files.exists(folder.resolve(FakePlanetaryComputer.OTHER_ZONE)));
     }
@@ -129,7 +129,7 @@ class LandsatDownloaderTest {
         long fileRequests = fake.server().requests().subList(before, fake.server().requests().size()).stream()
                 .filter(r -> r.path().endsWith(".tif")).count();
         assertEquals(0, fileRequests);
-        assertEquals(2, again.alreadyStored());
+        assertEquals(3, again.alreadyStored());
         assertEquals(0, again.stored());
     }
 
@@ -153,5 +153,17 @@ class LandsatDownloaderTest {
         IOException error = assertThrows(IOException.class, () -> download(other));
 
         assertTrue(error.getMessage().contains("already holds"), error.getMessage());
+    }
+
+    @Test
+    void aSceneClearOverOnlyACornerKeepsItsBands() throws Exception {
+        // Under 1% of the area is clear, but that corner can hold a whole field.
+        download(AREA);
+
+        LandsatEntry corner = LandsatFolder.open(folder).entries().stream()
+                .filter(e -> e.scene().equals(FakePlanetaryComputer.CORNER)).findFirst().orElseThrow();
+        assertEquals(1 / 1080.0, corner.clearShare(), 1e-4, "the index keeps 4 decimals");
+        assertEquals(LandsatEntry.Status.STORED, corner.status());
+        assertTrue(Files.isRegularFile(folder.resolve(FakePlanetaryComputer.CORNER).resolve("red.tif")));
     }
 }

@@ -13,7 +13,9 @@ import kz.kazagrosat.core.raster.PixelGrid;
  *   <li>{@link #CLEAR}, Landsat 9 on 10 July 2025, clear everywhere, bands holding {@link #dn(String)};</li>
  *   <li>{@link #CLOUDY}, Landsat 8 on 18 July 2025, cloud everywhere;</li>
  *   <li>{@link #LANDSAT_7}, on 14 July 2025, which is left out;</li>
- *   <li>{@link #OTHER_ZONE}, Landsat 8 on 26 July 2025, on a grid in UTM zone 42, which is left out.</li>
+ *   <li>{@link #OTHER_ZONE}, Landsat 8 on 26 July 2025, on a grid in UTM zone 42, which is left out;</li>
+ *   <li>{@link #CORNER}, Landsat 8 on 2 July 2025, clear in one 30 m pixel over the area (1 of its 1,080 pixels), cloud
+ *       elsewhere.</li>
  * </ul>
  */
 public final class FakePlanetaryComputer implements AutoCloseable {
@@ -22,6 +24,7 @@ public final class FakePlanetaryComputer implements AutoCloseable {
     public static final String CLOUDY = "LC08_L2SP_161023_20250718_02_T1";
     public static final String LANDSAT_7 = "LE07_L2SP_160023_20250714_02_T1";
     public static final String OTHER_ZONE = "LC08_L2SP_159023_20250726_02_T1";
+    public static final String CORNER = "LC08_L2SP_161023_20250702_02_T1";
     public static final String[] BANDS = {"blue", "green", "red", "nir08", "swir16", "swir22"};
     public static final String TOKEN = "st=2025&sig=fake";
 
@@ -43,6 +46,7 @@ public final class FakePlanetaryComputer implements AutoCloseable {
         scene(CLOUDY, "2025-07-18T06:46:00Z", CLOUD_QA, 32641);
         scene(LANDSAT_7, "2025-07-14T06:20:00Z", CLEAR_QA, 32641);
         scene(OTHER_ZONE, "2025-07-26T06:34:00Z", CLEAR_QA, 32642);
+        scene(CORNER, "2025-07-02T06:46:00Z", (x, y) -> x == 4 && y == 0 ? CLEAR_QA : CLOUD_QA, 32641);
         server.handle("/search", exchange -> TestHttpServer.respondJson(exchange, 200,
                 "{\"type\":\"FeatureCollection\",\"features\":[" + String.join(",", scenes) + "],\"links\":[]}"));
         server.handle("/token", exchange -> TestHttpServer.respondJson(exchange, 200,
@@ -63,8 +67,12 @@ public final class FakePlanetaryComputer implements AutoCloseable {
     }
 
     private void scene(String id, String datetime, int qa, int epsg) {
+        scene(id, datetime, (x, y) -> qa, epsg);
+    }
+
+    private void scene(String id, String datetime, SyntheticTiff.Pixels qa, int epsg) {
         double originX = epsg == 32641 ? SCENE.originX() : 200005;
-        server.serveFile("/" + id + "/qa_pixel.tif", tiff(epsg, originX, (x, y) -> qa));
+        server.serveFile("/" + id + "/qa_pixel.tif", tiff(epsg, originX, qa));
         StringBuilder assets = new StringBuilder("\"qa_pixel\":" + asset(id, "qa_pixel", "\"nodata\":1"));
         for (String band : BANDS) {
             server.serveFile("/" + id + "/" + band + ".tif", tiff(epsg, originX, (x, y) -> dn(band)));

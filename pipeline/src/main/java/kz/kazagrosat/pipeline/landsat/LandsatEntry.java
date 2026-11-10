@@ -16,7 +16,7 @@ public record LandsatEntry(String scene, LocalDate date, String satellite, doubl
     public enum Status {
         /** The quality layer and all six bands are on disk. */
         STORED,
-        /** Under {@link LandsatDownloader#MIN_CLEAR_SHARE} of the area was clear: only the quality layer is on disk. */
+        /** None of the area was clear: only the quality layer is on disk. */
         CLOUDY
     }
 }

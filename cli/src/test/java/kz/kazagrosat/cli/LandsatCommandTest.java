@@ -62,9 +62,9 @@ class LandsatCommandTest {
     void downloadsTheStacksSeasonAndPrintsASummary() {
         assertEquals(0, download(), stderr());
 
-        assertTrue(stdout().contains("Scenes:  4 found, 1 Landsat 7 left out, 1 in another UTM zone left out"),
+        assertTrue(stdout().contains("Scenes:  5 found, 1 Landsat 7 left out, 1 in another UTM zone left out"),
                 stdout());
-        assertTrue(stdout().contains("1 stored, 1 cloudy (bands skipped), 0 already stored"), stdout());
+        assertTrue(stdout().contains("2 stored, 1 cloudy (bands skipped), 0 already stored"), stdout());
         assertTrue(Files.isRegularFile(landsat.resolve("index.csv")));
         assertTrue(Files.isRegularFile(landsat.resolve(FakePlanetaryComputer.CLEAR).resolve("red.tif")));
     }
