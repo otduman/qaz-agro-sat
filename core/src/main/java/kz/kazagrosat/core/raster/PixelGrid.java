@@ -22,6 +22,24 @@ public record PixelGrid(int epsg, double originX, double originY, double pixelSi
         return new PixelWindow(left, top, right - left, bottom - top);
     }
 
+    /**
+     * The pixels touching the extent, clipped to this grid when the extent pokes out by at most {@code maxOutside}
+     * metres on any side. A district square's longitude-latitude box can reach a few metres past its tile's edge
+     * though the square itself is inside.
+     */
+    public PixelWindow windowClippedTo(Extent extent, double maxOutside) {
+        double minX = originX;
+        double maxX = originX + width * pixelSize;
+        double maxY = originY;
+        double minY = originY - height * pixelSize;
+        if (extent.minX() < minX - maxOutside || extent.maxX() > maxX + maxOutside
+                || extent.minY() < minY - maxOutside || extent.maxY() > maxY + maxOutside) {
+            throw new IllegalArgumentException("Extent " + extent + " is not inside grid " + this);
+        }
+        return windowCovering(new Extent(Math.max(extent.minX(), minX), Math.max(extent.minY(), minY),
+                Math.min(extent.maxX(), maxX), Math.min(extent.maxY(), maxY)));
+    }
+
     public PixelGrid subGrid(PixelWindow window) {
         return new PixelGrid(
                 epsg,

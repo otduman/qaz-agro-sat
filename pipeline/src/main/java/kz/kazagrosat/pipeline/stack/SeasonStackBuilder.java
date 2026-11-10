@@ -252,7 +252,8 @@ public final class SeasonStackBuilder {
 
     private static PixelWindow maskWindow(CogReader scl, BoundingBox area) {
         UtmProjection projection = UtmProjection.forEpsg(scl.grid().epsg());
-        return scl.grid().windowCovering(projection.project(area));
+        // Up to 1 km outside the tile is left out: a district square's box can poke a few metres past it.
+        return scl.grid().windowClippedTo(projection.project(area), 1000);
     }
 
     private static void requireGrid(PixelGrid actual, PixelGrid expected, StacItem scene, Layer layer)

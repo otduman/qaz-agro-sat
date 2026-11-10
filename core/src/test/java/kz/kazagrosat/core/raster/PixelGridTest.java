@@ -37,6 +37,22 @@ class PixelGridTest {
     }
 
     @Test
+    void anExtentPokingSlightlyOutIsClippedToTheGrid() {
+        Extent crossesWestEdge = new Extent(399940, 5999000, 400100, 5999900);
+
+        PixelWindow window = TILE_20M.windowClippedTo(crossesWestEdge, 1000);
+
+        assertEquals(new PixelWindow(0, 5, 7, 45), window, "the 20 m west of the grid are left out");
+    }
+
+    @Test
+    void anExtentFarOutsideIsStillRejected() {
+        Extent wellWest = new Extent(398000, 5999000, 400100, 5999900);
+
+        assertThrows(IllegalArgumentException.class, () -> TILE_20M.windowClippedTo(wellWest, 1000));
+    }
+
+    @Test
     void extentPastTheBottomEdgeIsRejected() {
         Extent crossesSouthEdge = new Extent(400000, 5890000, 400100, 5890300);
 
