@@ -54,3 +54,10 @@ real. Green fallow is reported on its own line.
   is unchanged on purpose.
 - The adjusted Landsat B11 reads a few points above Sentinel-2 on wet or green bare land (Kostanay 2023); the fit
   was made on Kokshetau 2025.
+
+## Holder pace with the screened dates
+
+`data/kokshetau/holders/by_holder_screened.py` (output `by-holder-screened.csv`), dated status only: holder A's
+2024 halfway date is 29 Sep against the square's 17 Sep (12 days late; the photo check put it at about 30 Sep);
+2025 and 2026 equal to the square (21 Sep, 4 Sep). Holder B within 2 days every year. 2023: neither holder has a
+dated field after the wet-spell screen.
