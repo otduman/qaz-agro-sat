@@ -37,6 +37,8 @@ import kz.kazagrosat.pipeline.stac.SceneSelector;
 import kz.kazagrosat.pipeline.stac.StacClient;
 import kz.kazagrosat.pipeline.stac.StacItem;
 import kz.kazagrosat.pipeline.stac.StacSearch;
+import kz.kazagrosat.pipeline.harvest.Harvest;
+import kz.kazagrosat.pipeline.harvest.HarvestReport;
 import kz.kazagrosat.pipeline.landsat.LandsatAdjustment;
 import kz.kazagrosat.pipeline.landsat.LandsatDownloader;
 import kz.kazagrosat.pipeline.landsat.LandsatFolder;
@@ -80,6 +82,12 @@ public final class Main {
                   and a summary. With --landsat, every Landsat day of the landsat
                   command's FOLDER adds rows too, put on the Sentinel-2 scale by the
                   built-in fit, or by FILE.
+
+              harvest --series FOLDER --fields FOLDER --out FOLDER
+                  Dates each field's cut from a series made with --landsat (or without),
+                  with a cut window and a status, leaving out photos with snow, frost or
+                  haze over the whole area. Writes a CSV, a day-of-year GeoTIFF, a map
+                  and a summary with checks.
 
             The scenes, ndvi, season and landsat commands accept --stac-url URL to use
             a different STAC API; landsat also takes --token-url URL.
@@ -193,6 +201,13 @@ public final class Main {
                 Path landsat = options.containsKey("--landsat") ? Path.of(options.get("--landsat")) : null;
                 Path fit = options.containsKey("--landsat-fit") ? Path.of(options.get("--landsat-fit")) : null;
                 yield (out, err) -> series(stack, fields, landsat, fit, folder, out, err);
+            }
+            case "harvest" -> {
+                allowOnly(options, Set.of("--series", "--fields", "--out"));
+                Path seriesFolder = Path.of(require(options, "--series"));
+                Path fields = Path.of(require(options, "--fields"));
+                Path folder = Path.of(require(options, "--out"));
+                yield (out, err) -> harvest(seriesFolder, fields, folder, out, err);
             }
             default -> throw new IllegalArgumentException("Unknown command: " + args[0]);
         };
@@ -388,6 +403,24 @@ public final class Main {
         }
         for (int i = 0; i < written.size(); i++) {
             out.println((i == 0 ? "Wrote:   " : "         ") + written.get(i));
+        }
+        return 0;
+    }
+
+    private static int harvest(Path seriesFolder, Path fieldsFolder, Path folder, PrintStream out, PrintStream err)
+            throws IOException, InterruptedException {
+        for (Path input : List.of(seriesFolder, fieldsFolder)) {
+            if (sameFolder(input, folder)) {
+                throw new IllegalArgumentException("--out " + folder + " would overwrite files in " + input
+                        + ", such as its summary. Give the harvest dates a folder of their own.");
+            }
+        }
+        HarvestReport report = Harvest.run(seriesFolder, fieldsFolder, folder, err::println);
+        out.println(text("Season:  %d, %d fields: %d dated, %d cut in a cloud gap, %d no cut found, %d unclear",
+                report.year(), report.fields(), report.dated(), report.cloudGap(), report.noCut(), report.unclear()));
+        out.println(text("Screened: %d dates (snow, frost or haze over the whole area)", report.screenedDates()));
+        for (int i = 0; i < report.written().size(); i++) {
+            out.println((i == 0 ? "Wrote:   " : "         ") + report.written().get(i));
         }
         return 0;
     }
