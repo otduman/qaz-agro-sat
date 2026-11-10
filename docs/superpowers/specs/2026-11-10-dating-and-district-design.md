@@ -64,6 +64,10 @@ those fields clear.
   per season across both squares' 8 seasons, including Kokshetau 2024-10-16, and is the only date the snow test
   marks.
 
+- **Wet spells out** (added after the first volume run, see `docs/superpowers/notes/2026-11-10-harvest-dating.md`):
+  one or two dates in a row whose median B11 over all fields is at least 3.5 points below both the date before and
+  the date after.
+
 Each screened date is listed with its reason in the summary.
 
 ### Statuses
@@ -102,8 +106,8 @@ cut's middle day of year (0 where none).
 
 Checks that must hold on every square and season, reported per square:
 
-1. **Fallow stays uncut:** share of `fallow` regions the rule would date (run on them for the test only).
-   Expected low; Kokshetau readings had 1-2 false fires in 10 controls.
+1. **Fallow stays uncut:** share of bare `fallow` regions (NDVI never above 0.3 from August) the rule would date
+   (run on them for the test only); fallow that greened is reported apart, as it may hold a late crop.
 2. **Two satellites agree:** the cut window from Sentinel-2 alone against the window with Landsat: share of fields
    whose windows overlap or touch. Disagreement flags fragile dates.
 3. **Overlap agrees:** fields dated in two neighbouring squares' overlap: share with matching windows.
