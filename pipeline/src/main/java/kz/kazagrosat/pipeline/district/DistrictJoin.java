@@ -81,7 +81,7 @@ public final class DistrictJoin {
             Map<String, double[]> centres = centres(sq.resolve("series-" + y).resolve("fields-" + y + ".csv"));
             Set<Integer> edge = edgeRegions(sq.resolve("fields-" + y).resolve("fields-" + y + ".tif"));
             List<String> lines = Files.readAllLines(harvestCsv, StandardCharsets.UTF_8);
-            int[] counts = new int[4];
+            int[] counts = new int[5];
             for (String line : lines.subList(1, lines.size())) {
                 String[] c = line.split(",", -1);
                 double[] centre = centres.get(c[0]);
@@ -92,13 +92,14 @@ public final class DistrictJoin {
                     case "dated" -> counts[0]++;
                     case "cut in a cloud gap" -> counts[1]++;
                     case "no cut found" -> counts[2]++;
+                    case "no crop seen" -> counts[4]++;
                     default -> counts[3]++;
                 }
             }
             Map<String, String> checks = checks(sq.resolve("harvest-" + y).resolve("summary-" + y + ".txt"));
             table.add(String.join(" | ", s.id(), Integer.toString(lines.size() - 1), Integer.toString(counts[0]),
                     Integer.toString(counts[1]), Integer.toString(counts[2]), Integer.toString(counts[3]),
-                    checks.getOrDefault("half", "-"), checks.getOrDefault("bare", "-"),
+                    Integer.toString(counts[4]), checks.getOrDefault("half", "-"), checks.getOrDefault("bare", "-"),
                     checks.getOrDefault("agree", "-"), checks.getOrDefault("screened", "-")));
         }
         Map<String, DistrictPlan.Square> byId = new HashMap<>();
@@ -137,7 +138,7 @@ public final class DistrictJoin {
         line(text, "Fields: %d, %.0f ha (each once, from the square whose core holds its centre; %d touch their"
                 + " square's edge)", kept.size(), kept.stream().mapToDouble(Row::area).sum(),
                 kept.stream().filter(Row::edge).count());
-        for (String status : List.of("dated", "cut in a cloud gap", "no cut found", "unclear")) {
+        for (String status : List.of("dated", "cut in a cloud gap", "no cut found", "unclear", "no crop seen")) {
             List<Row> these = kept.stream().filter(r -> r.status().equals(status)).toList();
             line(text, "  %s: %d fields, %.0f ha", status, these.size(), these.stream().mapToDouble(Row::area).sum());
         }
@@ -145,7 +146,7 @@ public final class DistrictJoin {
         line(text, "Checks");
         line(text, "  Fields seen by two squares with the same cut window: %d of %d", agree, pairs);
         line(text, "");
-        line(text, "Square | fields | dated | cloud gap | no cut found | unclear | half cut by | bare fallow cut"
+        line(text, "Square | fields | dated | cloud gap | no cut found | unclear | no crop seen | half cut by | bare fallow cut"
                 + " | Sentinel-2 alone agrees | screened dates");
         table.forEach(row -> line(text, "%s", row));
         Files.writeString(district.resolve("district-summary-" + y + ".txt"), text, StandardCharsets.UTF_8);

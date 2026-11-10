@@ -496,8 +496,9 @@ public final class Main {
             }
         }
         HarvestReport report = Harvest.run(seriesFolder, fieldsFolder, folder, err::println);
-        out.println(text("Season:  %d, %d fields: %d dated, %d cut in a cloud gap, %d no cut found, %d unclear",
-                report.year(), report.fields(), report.dated(), report.cloudGap(), report.noCut(), report.unclear()));
+        out.println(text("Season:  %d, %d fields: %d dated, %d cut in a cloud gap, %d no cut found, %d unclear, "
+                + "%d no crop seen", report.year(), report.fields(), report.dated(), report.cloudGap(), report.noCut(),
+                report.unclear(), report.noCrop()));
         out.println(text("Screened: %d dates (snow, frost or haze over the whole area)", report.screenedDates()));
         for (int i = 0; i < report.written().size(); i++) {
             out.println((i == 0 ? "Wrote:   " : "         ") + report.written().get(i));

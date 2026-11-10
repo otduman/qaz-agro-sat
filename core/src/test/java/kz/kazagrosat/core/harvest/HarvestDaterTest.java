@@ -22,6 +22,7 @@ class HarvestDaterTest {
     /** A clear reading every {@code step} days from 1 August; B11 0.22, 0.21, 0.20, then 0.29. */
     private static List<Reading> cut(int readings, int step) {
         List<Reading> rows = new ArrayList<>();
+        rows.add(s2(START.minusDays(20), 0.75, 0.15));
         for (int i = 0; i < readings; i++) {
             double b11 = i < 3 ? 0.22 - 0.01 * i : 0.29;
             rows.add(s2(START.plusDays((long) step * i), 0.3, b11));
@@ -57,6 +58,7 @@ class HarvestDaterTest {
     @Test
     void aFlatFieldHasNoCut() {
         List<Reading> rows = new ArrayList<>();
+        rows.add(s2(START.minusDays(20), 0.75, 0.15));
         for (int i = 0; i < 6; i++) {
             rows.add(s2(START.plusDays(5L * i), 0.3, 0.20 + 0.001 * i));
         }
@@ -126,5 +128,28 @@ class HarvestDaterTest {
                 "field F0 had no snow flag itself, but the date is gone");
         HarvestDater.FieldCut unscreened = HarvestDater.date(rows, new HarvestDater.Options(true, false)).cuts().get(0);
         assertEquals(LocalDate.parse("2026-08-14"), unscreened.from(), "without the screen the dark date is used");
+    }
+    @Test
+    void aFieldThatNeverGreenedHasNoCropToCut() {
+        // Bare soil drying in August brightens like a cut; a field that never reached NDVI 0.5 has nothing to cut.
+        List<Reading> bare = new ArrayList<>();
+        bare.add(s2(LocalDate.parse("2026-06-15"), 0.35, 0.25));
+        bare.add(s2(LocalDate.parse("2026-07-15"), 0.45, 0.25));
+        bare.addAll(cut(6, 5).subList(1, 7));
+
+        HarvestDater.FieldCut cut = only(Map.of("F1", bare), HarvestDater.Options.FULL);
+
+        assertEquals(HarvestDater.Status.NO_CROP, cut.status());
+        assertNull(cut.from());
+        assertEquals("no crop seen", cut.status().label());
+    }
+
+    @Test
+    void aFieldThatGreenedInJulyKeepsItsCut() {
+        List<Reading> crop = new ArrayList<>();
+        crop.add(s2(LocalDate.parse("2026-07-15"), 0.72, 0.15));
+        crop.addAll(cut(6, 5).subList(1, 7));
+
+        assertEquals(HarvestDater.Status.DATED, only(Map.of("F1", crop), HarvestDater.Options.FULL).status());
     }
 }

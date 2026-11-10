@@ -46,6 +46,8 @@ class HarvestTest {
                 "2025-F0003,other,12.80,10.00,53.5,62.5,no",
                 "2025-F0004,field,3.20,0.00,53.5,62.5,yes"));
         List<String> rows = new ArrayList<>(List.of(HEADER));
+        // The crop greened in July (NDVI 0.75) before ripening.
+        rows.add("2025-F0001,2025-07-15,1.0000,0.7,0.7500,0.8,0.1500,0.1,0.0,0.3,0.05,0.0400,0.0000,,,,S2");
         double[] cut = {0.22, 0.21, 0.20, 0.29, 0.29, 0.29};
         for (int i = 0; i < cut.length; i++) {
             String date = LocalDate.parse("2025-08-01").plusDays(5L * i).toString();
