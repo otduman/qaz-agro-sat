@@ -69,17 +69,18 @@ class SeriesOutputsTest {
         List<String> lines = lines("series-2025.csv");
 
         assertEquals("field,date,clear_share,ndvi_p25,ndvi_median,ndvi_p75,b11,b12,ndti,nir,brightness,blue,"
-                + "snow_share,roughness,line_strength,line_direction", lines.get(0));
+                + "snow_share,roughness,line_strength,line_direction,satellite", lines.get(0));
         assertEquals(1 + 3 * 8, lines.size());
         String clearRow = lines.stream().filter(l -> l.startsWith("2025-F0001,2025-07-10,")).findFirst().orElseThrow();
         String[] cells = clearRow.split(",", -1);
-        assertEquals(16, cells.length, clearRow);
+        assertEquals(17, cells.length, clearRow);
         assertEquals("1.0000", cells[2]);
         assertEquals("0.4200", cells[4]);
         assertEquals("0.2000", cells[6]);
         assertEquals("", cells[15], "lines on a flat field have no direction");
-        assertTrue(lines.contains("2025-F0001,2025-07-25,0.0000,,,,,,,,,,0.0000,,,"), "a clouded date");
-        assertTrue(lines.contains("2025-F0004,2025-07-25,,,,,,,,,,,,,,"), "a field with no interior");
+        assertEquals("S2", cells[16]);
+        assertTrue(lines.contains("2025-F0001,2025-07-25,0.0000,,,,,,,,,,0.0000,,,,S2"), "a clouded date");
+        assertTrue(lines.contains("2025-F0004,2025-07-25,,,,,,,,,,,,,,,S2"), "a field with no interior");
     }
 
     @Test
@@ -107,6 +108,7 @@ class SeriesOutputsTest {
                 summary);
         assertTrue(summary.contains("Fields with nothing left after the 20 m shrink: 1 (2025-F0004)"), summary);
         assertTrue(summary.contains("Rows: 24; with blank values: 10 (under 60% clear 2, no interior 8)"), summary);
+        assertTrue(summary.contains("Landsat: none"), summary);
     }
 
     @Test

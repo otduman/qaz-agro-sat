@@ -15,12 +15,25 @@ import java.time.LocalDate;
  * @param blue blue reflectance, which haze raises
  * @param snowShare the share the cloud mask calls snow, plus the share it calls clear ground where the snow
  *     test finds snow (cloud never counts)
- * @param roughness, lineStrength, lineDirection see {@link kz.kazagrosat.core.series.Texture}
+ * @param roughness, lineStrength, lineDirection see {@link kz.kazagrosat.core.series.Texture}; blank on Landsat rows,
+ *     whose 30 m pixels are too coarse for combine tracks, as is {@code brightness}
+ * @param satellite {@link #SENTINEL_2}, or {@code LC08} or {@code LC09} for a Landsat row, whose values are put on
+ *     the Sentinel-2 scale
  */
 public record SeriesRow(String field, LocalDate date, double clearShare, double ndviP25, double ndviMedian,
                         double ndviP75, double b11, double b12, double ndti, double nir, double brightness,
                         double blue, double snowShare, double roughness, double lineStrength,
-                        double lineDirection) {
+                        double lineDirection, String satellite) {
+
+    public static final String SENTINEL_2 = "S2";
+
+    /** A Sentinel-2 row. */
+    public SeriesRow(String field, LocalDate date, double clearShare, double ndviP25, double ndviMedian,
+                     double ndviP75, double b11, double b12, double ndti, double nir, double brightness,
+                     double blue, double snowShare, double roughness, double lineStrength, double lineDirection) {
+        this(field, date, clearShare, ndviP25, ndviMedian, ndviP75, b11, b12, ndti, nir, brightness, blue, snowShare,
+                roughness, lineStrength, lineDirection, SENTINEL_2);
+    }
 
     /** Whether the field was clear enough on this date to have values. */
     public boolean hasValues() {
