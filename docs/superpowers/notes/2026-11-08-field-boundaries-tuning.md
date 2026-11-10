@@ -228,12 +228,18 @@ each looked at on the post-harvest photo:
 - 2024 F04: split along a dark track across the field; could be a border, can't tell.
 - 2023 F02: split along a pale strip with dashes running through the field; unclear.
 - 2024 B11: split by a line with no visible border on that photo.
-- 2023 B08: a pale straight stripe inside one field cut it into three long slivers. Wrong.
-- 2025 D01: a long thin sliver cut off the meadow along a faint line. Wrong.
+- 2023 B08: cut into strips along a pale straight stripe. I first called this wrong; see below.
+- 2025 D01: a long thin piece cut off the meadow along a faint line. Wrong, but the meadow is "other", so it
+  never reaches the series.
 
-So the new lines sometimes follow tracks or stripes inside a field and cut off long thin slivers. A rule for
-slivers (a region much longer than it is wide, joined back to its neighbour) would be the next thing to try; it
-is not done here.
+**Slivers, checked afterwards.** The pieces at 2023 B08 are not slivers of one field: they are 18 to 66 ha, and in
+July their greenness differs by up to 0.14 (0.83, 0.77 and 0.69 on 13 July 2023), so they grew differently. They
+are most likely separate strips. Joining step 2 had already refused to join them, because their curves differ. Nor
+did the change make thin regions more common. Field and fallow regions at most about 160 m wide (half-width of at
+most 8 pixels), before -> after: 2025 54 (458 ha) -> 47 (466 ha); 2024 43 (433 ha) -> 55 (652 ha); 2023 28 (269 ha)
+-> 43 (462 ha). That is under 3% of the field area in each season, and the 2025 photos show narrow strips farmed
+side by side in several places. A rule joining thin regions to a neighbour would join strips that grow differently, so I did not
+add one.
 
 **Stability** rose: 2025 -> 2024 60.2% -> 64.1% (chance 15.6%), 2024 -> 2025 70.4% -> 70.8% (17.4%),
 2025 -> 2023 51.3% -> 57.4% (14.2%), 2023 -> 2025 69.7% -> 69.3% (17.4%).

@@ -37,6 +37,16 @@ import kz.kazagrosat.pipeline.stac.SceneSelector;
 import kz.kazagrosat.pipeline.stac.StacClient;
 import kz.kazagrosat.pipeline.stac.StacItem;
 import kz.kazagrosat.pipeline.stac.StacSearch;
+import kz.kazagrosat.core.geo.DistrictPlan;
+import kz.kazagrosat.pipeline.district.District;
+import kz.kazagrosat.pipeline.district.DistrictJoin;
+import kz.kazagrosat.pipeline.district.DistrictRunner;
+import kz.kazagrosat.pipeline.harvest.Harvest;
+import kz.kazagrosat.pipeline.harvest.HarvestReport;
+import kz.kazagrosat.pipeline.landsat.LandsatAdjustment;
+import kz.kazagrosat.pipeline.landsat.LandsatDownloader;
+import kz.kazagrosat.pipeline.landsat.LandsatFolder;
+import kz.kazagrosat.pipeline.landsat.LandsatReport;
 import kz.kazagrosat.pipeline.stack.ContactSheet;
 import kz.kazagrosat.pipeline.stack.SeasonStack;
 import kz.kazagrosat.pipeline.stack.SeasonStackBuilder;
@@ -64,16 +74,44 @@ public final class Main {
                   Finds the season's fields from a stack made by the season command and
                   writes them as GeoJSON, a label GeoTIFF, outline pictures and a summary.
 
+              landsat --stack FOLDER --out FOLDER
+                  Downloads the Landsat 8 and 9 scenes of a stack's area and season from
+                  Planetary Computer (no account needed) into FOLDER, for the series
+                  command. Run it again to finish an interrupted download.
+
               series --stack FOLDER --fields FOLDER --out FOLDER
+                     [--landsat FOLDER [--landsat-fit FILE]]
                   Reads every field the fields command found on every date of the same
                   stack, and writes one row per field and date as CSV, with a field list
-                  and a summary.
+                  and a summary. With --landsat, every Landsat day of the landsat
+                  command's FOLDER adds rows too, put on the Sentinel-2 scale by the
+                  built-in fit, or by FILE.
 
-            The scenes, ndvi and season commands accept --stac-url URL to use a
-            different STAC API.
+              harvest --series FOLDER --fields FOLDER --out FOLDER
+                  Dates each field's cut from a series made with --landsat (or without),
+                  with a cut window and a status, leaving out photos with snow, frost or
+                  haze over the whole area. Writes a CSV, a day-of-year GeoTIFF, a map
+                  and a summary with checks.
+
+              district plan --boundary FILE --out FOLDER
+                  Splits the district outlined in a GeoJSON file into squares of about
+                  20 x 20 km, each inside one Sentinel-2 tile, overlapping by 1 km.
+
+              district run --district FOLDER --year YYYY [--squares ID,ID]
+                  Runs season, fields, landsat, series and harvest for every square (or
+                  the ones listed), one at a time, skipping squares already done. Logs
+                  time and disk per step in FOLDER/run-YYYY.csv.
+
+              district join --district FOLDER --year YYYY
+                  Joins the squares done so far into one field table and a summary with
+                  each square's checks, counting every field once.
+
+            The scenes, ndvi, season and landsat commands accept --stac-url URL to use
+            a different STAC API; landsat also takes --token-url URL.
             """;
 
     private static final String STAC_URL = "--stac-url";
+    private static final String TOKEN_URL = "--token-url";
     /** Sentinel-2 started imaging in mid-2015. */
     private static final int FIRST_YEAR = 2015;
     private static final int DOWNLOAD_THREADS = 4;
@@ -119,6 +157,9 @@ public final class Main {
         if (args.length == 0) {
             throw new IllegalArgumentException("No command given");
         }
+        if (args[0].equals("district")) {
+            return district(args);
+        }
         Map<String, String> options = parseOptions(args);
         URI stacUri = options.containsKey(STAC_URL) ? URI.create(options.get(STAC_URL)) : StacClient.EARTH_SEARCH;
         return switch (args[0]) {
@@ -155,14 +196,100 @@ public final class Main {
                 Path folder = Path.of(require(options, "--out"));
                 yield (out, err) -> fields(stack, folder, out, err);
             }
+            case "landsat" -> {
+                allowOnly(options, Set.of("--stack", "--out", STAC_URL, TOKEN_URL));
+                Path stack = Path.of(require(options, "--stack"));
+                Path folder = Path.of(require(options, "--out"));
+                if (stack.toAbsolutePath().normalize().equals(folder.toAbsolutePath().normalize())) {
+                    throw new IllegalArgumentException("--out " + folder + " is the stack itself. Give the Landsat"
+                            + " scenes a folder of their own.");
+                }
+                URI landsatStac = options.containsKey(STAC_URL)
+                        ? URI.create(options.get(STAC_URL)) : LandsatDownloader.PLANETARY_STAC;
+                URI tokenUri = options.containsKey(TOKEN_URL)
+                        ? URI.create(options.get(TOKEN_URL)) : LandsatDownloader.PLANETARY_TOKEN;
+                yield (out, err) -> landsat(stack, folder, landsatStac, tokenUri, out, err);
+            }
             case "series" -> {
-                allowOnly(options, Set.of("--stack", "--fields", "--out"));
+                allowOnly(options, Set.of("--stack", "--fields", "--out", "--landsat", "--landsat-fit"));
                 Path stack = Path.of(require(options, "--stack"));
                 Path fields = Path.of(require(options, "--fields"));
                 Path folder = Path.of(require(options, "--out"));
-                yield (out, err) -> series(stack, fields, folder, out, err);
+                if (options.containsKey("--landsat-fit") && !options.containsKey("--landsat")) {
+                    throw new IllegalArgumentException("--landsat-fit needs --landsat");
+                }
+                Path landsat = options.containsKey("--landsat") ? Path.of(options.get("--landsat")) : null;
+                Path fit = options.containsKey("--landsat-fit") ? Path.of(options.get("--landsat-fit")) : null;
+                yield (out, err) -> series(stack, fields, landsat, fit, folder, out, err);
+            }
+            case "harvest" -> {
+                allowOnly(options, Set.of("--series", "--fields", "--out"));
+                Path seriesFolder = Path.of(require(options, "--series"));
+                Path fields = Path.of(require(options, "--fields"));
+                Path folder = Path.of(require(options, "--out"));
+                yield (out, err) -> harvest(seriesFolder, fields, folder, out, err);
             }
             default -> throw new IllegalArgumentException("Unknown command: " + args[0]);
+        };
+    }
+
+    private static Command district(String[] args) {
+        if (args.length < 2 || args[1].startsWith("--")) {
+            throw new IllegalArgumentException("district needs plan, run or join, such as: district plan --boundary FILE"
+                    + " --out FOLDER");
+        }
+        String[] rest = java.util.Arrays.copyOfRange(args, 1, args.length);
+        Map<String, String> options = parseOptions(rest);
+        return switch (args[1]) {
+            case "plan" -> {
+                allowOnly(options, Set.of("--boundary", "--out"));
+                Path boundary = Path.of(require(options, "--boundary"));
+                Path folder = Path.of(require(options, "--out"));
+                yield (out, err) -> {
+                    List<DistrictPlan.Square> squares = District.plan(boundary, folder);
+                    double inside = squares.stream().mapToDouble(DistrictPlan.Square::shareInside).sum();
+                    out.println(text("Squares: %d of about 20 x 20 km (%.1f squares' worth inside the district)",
+                            squares.size(), inside));
+                    out.println("Wrote:   " + folder.resolve(District.PLAN));
+                    return 0;
+                };
+            }
+            case "run" -> {
+                allowOnly(options, Set.of("--district", "--year", "--squares"));
+                Path folder = Path.of(require(options, "--district"));
+                int year = parseYear(require(options, "--year"));
+                List<String> only = options.containsKey("--squares")
+                        ? List.of(options.get("--squares").split(",")) : List.of();
+                yield (out, err) -> {
+                    DistrictRunner.Report report = DistrictRunner.run(folder, year, only, (stepArgs, log) -> {
+                        try (PrintStream stepOut = new PrintStream(java.nio.file.Files.newOutputStream(log), true,
+                                java.nio.charset.StandardCharsets.UTF_8)) {
+                            return run(stepArgs, stepOut, stepOut);
+                        }
+                    }, err::println);
+                    out.println(text("Squares: %d done, %d already done, %d failed", report.done().size(),
+                            report.skipped().size(), report.failed().size()));
+                    report.failed().forEach((id, why) -> out.println("  " + id + ": " + why));
+                    out.println("Log:     " + folder.resolve("run-" + year + ".csv"));
+                    return report.failed().isEmpty() ? 0 : 1;
+                };
+            }
+            case "join" -> {
+                allowOnly(options, Set.of("--district", "--year"));
+                Path folder = Path.of(require(options, "--district"));
+                int year = parseYear(require(options, "--year"));
+                yield (out, err) -> {
+                    DistrictJoin.Result result = DistrictJoin.join(folder, year);
+                    out.println(text("Joined:  %d squares, %d fields", result.squares(), result.fields()));
+                    out.println(text("Overlap: %d of %d fields seen by two squares got the same cut window",
+                            result.overlapAgree(), result.overlapPairs()));
+                    out.println("Wrote:   " + folder.resolve("district-harvest-" + year + ".csv"));
+                    out.println("         " + folder.resolve("district-summary-" + year + ".txt"));
+                    return 0;
+                };
+            }
+            default -> throw new IllegalArgumentException("Unknown district command: " + args[1]
+                    + ". Use plan, run or join.");
         };
     }
 
@@ -301,15 +428,44 @@ public final class Main {
         return 0;
     }
 
-    private static int series(Path stackFolder, Path fieldsFolder, Path folder, PrintStream out, PrintStream err)
-            throws IOException, InterruptedException {
+    private static int landsat(Path stackFolder, Path folder, URI stacUri, URI tokenUri, PrintStream out,
+                               PrintStream err) throws IOException, InterruptedException {
+        SeasonStack stack = SeasonStack.open(stackFolder);
+        LandsatReport report = new LandsatDownloader(stacUri, tokenUri, RetryPolicy.DEFAULT, err::println)
+                .download(stack.area(), folder);
+        out.println(text("Scenes:  %d found, %d Landsat 7 left out, %d in another UTM zone left out%s",
+                report.found(), report.landsat7(), report.otherZone().size(),
+                report.outside() == 0 ? "" : text(", %d not over the area", report.outside())));
+        out.println(text("Kept:    %d stored, %d cloudy (bands skipped), %d already stored",
+                report.stored(), report.cloudy(), report.alreadyStored()));
+        out.println(text("Size:    %.2f GB in %s", sizeOf(folder) / 1e9, folder));
+        if (!report.failures().isEmpty()) {
+            err.println("Failed scenes:");
+            report.failures().forEach(line -> err.println("  " + line));
+            err.println("Run the same command again to retry them.");
+            return 1;
+        }
+        return 0;
+    }
+
+    private static int series(Path stackFolder, Path fieldsFolder, Path landsatFolder, Path fitFile, Path folder,
+                              PrintStream out, PrintStream err) throws IOException, InterruptedException {
         for (Path input : List.of(stackFolder, fieldsFolder)) {
             if (sameFolder(input, folder)) {
                 throw new IllegalArgumentException("--out " + folder + " would overwrite files in " + input
                         + ", such as its summary. Give the series a folder of its own.");
             }
         }
-        Series series = SeriesBuilder.build(SeasonStack.open(stackFolder), fieldsFolder, err::println);
+        SeriesBuilder.LandsatInput landsat = null;
+        if (landsatFolder != null) {
+            if (sameFolder(landsatFolder, folder)) {
+                throw new IllegalArgumentException("--out " + folder + " would overwrite files in " + landsatFolder
+                        + ". Give the series a folder of its own.");
+            }
+            LandsatAdjustment fit = fitFile == null ? LandsatAdjustment.DEFAULT : LandsatAdjustment.read(fitFile);
+            landsat = new SeriesBuilder.LandsatInput(LandsatFolder.open(landsatFolder), fit);
+        }
+        Series series = SeriesBuilder.build(SeasonStack.open(stackFolder), fieldsFolder, landsat, err::println);
         List<Path> written = SeriesOutputs.write(series, folder);
 
         List<SeriesField> inSeries = series.fields().stream().filter(SeriesField::inSeries).toList();
@@ -321,8 +477,30 @@ public final class Main {
                 + "%d with nothing left after the %.0f m shrink", inSeries.size(), fields, inSeries.size() - fields,
                 series.fields().size() - inSeries.size(), noInterior, SeriesBuilder.INTERIOR_METRES));
         out.println(text("Rows:    %d, %d with blank values", series.rows().size(), blank));
+        if (landsat != null) {
+            out.println(text("Landsat: %d satellite-days, adjusted by the %s", series.landsatDays().size(),
+                    series.landsatSource()));
+        }
         for (int i = 0; i < written.size(); i++) {
             out.println((i == 0 ? "Wrote:   " : "         ") + written.get(i));
+        }
+        return 0;
+    }
+
+    private static int harvest(Path seriesFolder, Path fieldsFolder, Path folder, PrintStream out, PrintStream err)
+            throws IOException, InterruptedException {
+        for (Path input : List.of(seriesFolder, fieldsFolder)) {
+            if (sameFolder(input, folder)) {
+                throw new IllegalArgumentException("--out " + folder + " would overwrite files in " + input
+                        + ", such as its summary. Give the harvest dates a folder of their own.");
+            }
+        }
+        HarvestReport report = Harvest.run(seriesFolder, fieldsFolder, folder, err::println);
+        out.println(text("Season:  %d, %d fields: %d dated, %d cut in a cloud gap, %d no cut found, %d unclear",
+                report.year(), report.fields(), report.dated(), report.cloudGap(), report.noCut(), report.unclear()));
+        out.println(text("Screened: %d dates (snow, frost or haze over the whole area)", report.screenedDates()));
+        for (int i = 0; i < report.written().size(); i++) {
+            out.println((i == 0 ? "Wrote:   " : "         ") + report.written().get(i));
         }
         return 0;
     }

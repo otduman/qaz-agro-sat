@@ -6,8 +6,13 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
+import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.TreeSet;
 import java.util.stream.Collectors;
 import kz.kazagrosat.core.fields.LandLabel;
 import kz.kazagrosat.pipeline.fields.OutputSwap;
@@ -25,7 +30,7 @@ import kz.kazagrosat.pipeline.fields.OutputSwap;
 public final class SeriesOutputs {
 
     static final String SERIES_HEADER = "field,date,clear_share,ndvi_p25,ndvi_median,ndvi_p75,b11,b12,ndti,nir,"
-            + "brightness,blue,snow_share,roughness,line_strength,line_direction";
+            + "brightness,blue,snow_share,roughness,line_strength,line_direction,satellite";
     static final String FIELDS_HEADER = "id,land,area_ha,interior_ha,centroid_lat,centroid_lon,in_series";
 
     private SeriesOutputs() {}
@@ -46,6 +51,8 @@ public final class SeriesOutputs {
                         out.write(',');
                         out.write(Double.isNaN(v) ? "" : decimals(v));
                     }
+                    out.write(',');
+                    out.write(r.satellite());
                     out.write('\n');
                 }
             }
@@ -94,7 +101,62 @@ public final class SeriesOutputs {
         line(text, "Rows: %d; with blank values: %d (under %.0f%% clear %d, no interior %d)", series.rows().size(),
                 blank, SeriesBuilder.MIN_CLEAR_SHARE * 100, cut, blank - cut);
         line(text, "Rows with any snow in the interior: %d", snowy);
+        if (series.landsatDays().isEmpty()) {
+            line(text, "Landsat: none");
+        } else {
+            line(text, "Landsat: %d satellite-day%s (%s)", series.landsatDays().size(),
+                    series.landsatDays().size() == 1 ? "" : "s", String.join(", ", series.landsatDays()));
+            line(text, "Landsat put on the Sentinel-2 scale by: %s", series.landsatSource());
+        }
+        LocalDate from = LocalDate.of(series.year(), 8, 1);
+        LocalDate to = LocalDate.of(series.year(), 9, 30);
+        String gap = "Longest wait for a clear reading, 1 August to 30 September, typical field: Sentinel-2 %s";
+        if (series.landsatDays().isEmpty()) {
+            line(text, gap, days(typicalLongestGap(series, false, from, to)));
+        } else {
+            line(text, gap + ", with Landsat %s", days(typicalLongestGap(series, false, from, to)),
+                    days(typicalLongestGap(series, true, from, to)));
+        }
         return text.toString();
+    }
+
+    private static String days(long days) {
+        return days < 0 ? "-" : days + " days";
+    }
+
+    /**
+     * Per field in the series with an interior, the most days between neighbouring dates that have values, counting
+     * the window's ends as edges; the median over those fields, or -1 when there are none.
+     */
+    static long typicalLongestGap(Series series, boolean withLandsat, LocalDate from, LocalDate to) {
+        Map<String, TreeSet<LocalDate>> seen = new LinkedHashMap<>();
+        for (SeriesField field : series.fields()) {
+            if (field.inSeries() && field.interiorPixels() > 0) {
+                seen.put(field.id(), new TreeSet<>());
+            }
+        }
+        for (SeriesRow row : series.rows()) {
+            boolean counted = withLandsat || row.satellite().equals(SeriesRow.SENTINEL_2);
+            if (counted && row.hasValues() && seen.containsKey(row.field())) {
+                seen.get(row.field()).add(row.date());
+            }
+        }
+        if (seen.isEmpty()) {
+            return -1;
+        }
+        long[] gaps = new long[seen.size()];
+        int i = 0;
+        for (TreeSet<LocalDate> dates : seen.values()) {
+            LocalDate previous = from;
+            long longest = 0;
+            for (LocalDate date : dates.subSet(from, true, to, true)) {
+                longest = Math.max(longest, ChronoUnit.DAYS.between(previous, date));
+                previous = date;
+            }
+            gaps[i++] = Math.max(longest, ChronoUnit.DAYS.between(previous, to));
+        }
+        Arrays.sort(gaps);
+        return gaps[gaps.length / 2];
     }
 
     private static void line(StringBuilder text, String format, Object... values) {

@@ -15,8 +15,8 @@ import kz.kazagrosat.core.raster.PixelWindow;
 
 /**
  * Reads pixel windows from the full-resolution image of a single-band, tiled GeoTIFF holding
- * unsigned integers or 32-bit floats, fetching only the tiles a window touches. Anything else is
- * rejected with a clear error rather than read wrongly.
+ * unsigned integers, signed 16-bit integers or 32-bit floats, fetching only the tiles a window
+ * touches. Anything else is rejected with a clear error rather than read wrongly.
  */
 public final class CogReader {
 
@@ -55,13 +55,16 @@ public final class CogReader {
     private static final int PREDICTOR_HORIZONTAL = 2;
     private static final int PREDICTOR_FLOATING_POINT = 3;
     private static final int SAMPLE_UNSIGNED = 1;
+    private static final int SAMPLE_SIGNED = 2;
     private static final int SAMPLE_FLOAT = 3;
     private static final int GEO_KEY_PROJECTED_CRS = 3072;
+    private static final int GEO_KEY_GEOGRAPHIC_CRS = 2048;
 
     private final ByteSource source;
     private final ByteOrder order;
     private final PixelGrid grid;
     private final boolean floating;
+    private final boolean signed;
     private final int bits;
     private final int compression;
     private final int predictor;
@@ -74,7 +77,11 @@ public final class CogReader {
     /** The nodata value as stored: a whole number, or the raw bits of a float. */
     private final int nodata;
 
-    private CogReader(ByteSource source, ByteOrder order, Directory directory) throws IOException {
+    /**
+     * @param geo the full image's directory, which carries the GeoTIFF tags; the same as
+     *            {@code directory} unless this reader reads an overview
+     */
+    private CogReader(ByteSource source, ByteOrder order, Directory directory, Directory geo) throws IOException {
         this.source = source;
         this.order = order;
 
@@ -83,13 +90,17 @@ public final class CogReader {
             throw new IOException("Expected one band but the file has " + samples + " samples per pixel");
         }
         long sampleFormat = directory.number(TAG_SAMPLE_FORMAT, SAMPLE_UNSIGNED);
-        if (sampleFormat != SAMPLE_UNSIGNED && sampleFormat != SAMPLE_FLOAT) {
+        if (sampleFormat != SAMPLE_UNSIGNED && sampleFormat != SAMPLE_SIGNED && sampleFormat != SAMPLE_FLOAT) {
             throw new IOException("Unsupported sample format " + sampleFormat);
         }
         this.floating = sampleFormat == SAMPLE_FLOAT;
+        this.signed = sampleFormat == SAMPLE_SIGNED;
         this.bits = (int) directory.number(TAG_BITS, 1);
         if (floating ? bits != 32 : bits != 8 && bits != 16) {
             throw new IOException("Unsupported bit depth " + bits);
+        }
+        if (signed && bits != 16) {
+            throw new IOException("Unsupported signed " + bits + "-bit pixels; only signed 16-bit is read");
         }
         this.compression = (int) directory.number(TAG_COMPRESSION, COMPRESSION_NONE);
         if (compression != COMPRESSION_NONE && compression != COMPRESSION_DEFLATE
@@ -111,8 +122,14 @@ public final class CogReader {
         int width = (int) directory.number(TAG_WIDTH, 0);
         int height = (int) directory.number(TAG_HEIGHT, 0);
         this.tilesAcross = (width + tileWidth - 1) / tileWidth;
-        this.grid = readGrid(directory, width, height);
-        this.nodata = readNodata(directory, floating);
+        if (geo == directory) {
+            this.grid = readGrid(directory, width, height);
+        } else {
+            PixelGrid full = readGrid(geo, (int) geo.number(TAG_WIDTH, 0), (int) geo.number(TAG_HEIGHT, 0));
+            double pixelSize = full.pixelSize() * full.width() / width;
+            this.grid = new PixelGrid(full.epsg(), full.originX(), full.originY(), pixelSize, width, height);
+        }
+        this.nodata = readNodata(directory.has(TAG_GDAL_NODATA) ? directory : geo, floating);
     }
 
     private static int readNodata(Directory directory, boolean floating) throws IOException {
@@ -127,7 +144,19 @@ public final class CogReader {
         return Float.floatToRawIntBits(text.equalsIgnoreCase("nan") ? Float.NaN : Float.parseFloat(text));
     }
 
+    /** Opens the full-resolution image. */
     public static CogReader open(ByteSource source) throws IOException, InterruptedException {
+        return open(source, 0);
+    }
+
+    /**
+     * Opens one resolution level: 0 is the full image, 1 its first overview, and so on. An overview
+     * covers the same ground as the full image with fewer, larger pixels.
+     */
+    public static CogReader open(ByteSource source, int level) throws IOException, InterruptedException {
+        if (level < 0) {
+            throw new IllegalArgumentException("Level must be 0 or more, not " + level);
+        }
         byte[] head = source.read(0, HEADER_CHUNK);
         ByteOrder order = detectOrder(head);
         ByteBuffer buffer = ByteBuffer.wrap(head).order(order);
@@ -139,7 +168,17 @@ public final class CogReader {
             throw new IOException("This is not a TIFF file");
         }
         long directoryOffset = Integer.toUnsignedLong(buffer.getInt(4));
-        return new CogReader(source, order, Directory.read(new Header(source, head), directoryOffset, order));
+        Header header = new Header(source, head);
+        Directory full = Directory.read(header, directoryOffset, order);
+        Directory wanted = full;
+        for (int i = 1; i <= level; i++) {
+            if (wanted.next() == 0) {
+                throw new IOException("Level " + level + " was asked for but the file has only "
+                        + (i - 1) + " overview level(s)");
+            }
+            wanted = Directory.read(header, wanted.next(), order);
+        }
+        return new CogReader(source, order, wanted, full);
     }
 
     private static ByteOrder detectOrder(byte[] head) throws IOException {
@@ -170,14 +209,19 @@ public final class CogReader {
                 return (int) keys[i + 3];
             }
         }
-        throw new IOException("The file does not name a projected coordinate system");
+        for (int i = 4; i + 3 < keys.length; i += 4) {
+            if (keys[i] == GEO_KEY_GEOGRAPHIC_CRS) {
+                return (int) keys[i + 3];
+            }
+        }
+        throw new IOException("The file does not name a coordinate system");
     }
 
     public PixelGrid grid() {
         return grid;
     }
 
-    /** Returns the window's unsigned pixel values, row by row. */
+    /** Returns the window's integer pixel values, row by row: signed 16-bit files give negative values too. */
     public int[] readWindow(PixelWindow window) throws IOException, InterruptedException {
         if (floating) {
             throw new IllegalStateException("This file holds floats: use readFloatWindow");
@@ -281,6 +325,11 @@ public final class CogReader {
                 }
             }
         }
+        if (signed) {
+            for (int i = 0; i < samples.length; i++) {
+                samples[i] = (short) samples[i];
+            }
+        }
         return samples;
     }
 
@@ -330,6 +379,13 @@ public final class CogReader {
 
         private final Map<Integer, Entry> entries = new HashMap<>();
 
+        /** Where the next image directory (the next overview) starts, or 0 if there is none. */
+        private long next;
+
+        long next() {
+            return next;
+        }
+
         static Directory read(Header header, long offset, ByteOrder order)
                 throws IOException, InterruptedException {
             int count = Short.toUnsignedInt(ByteBuffer.wrap(header.bytes(offset, 2)).order(order).getShort());
@@ -352,6 +408,8 @@ public final class CogReader {
                 }
                 directory.entries.put(tag, new Entry(type, values, value));
             }
+            directory.next = Integer.toUnsignedLong(
+                    ByteBuffer.wrap(header.bytes(offset + 2 + count * 12L, 4)).order(order).getInt());
             return directory;
         }
 

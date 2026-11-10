@@ -22,7 +22,12 @@ public record StackArea(BoundingBox bbox, int year, String tile, PixelGrid grid,
     static final String FILE = "stack.properties";
 
     public static Optional<StackArea> read(Path folder) throws IOException {
-        Path file = folder.resolve(FILE);
+        return read(folder, FILE);
+    }
+
+    /** As {@link #read(Path)}, from a file of another name, such as a Landsat folder's {@code landsat.properties}. */
+    public static Optional<StackArea> read(Path folder, String fileName) throws IOException {
+        Path file = folder.resolve(fileName);
         if (!Files.exists(file)) {
             return Optional.empty();
         }
@@ -43,6 +48,11 @@ public record StackArea(BoundingBox bbox, int year, String tile, PixelGrid grid,
     }
 
     public void write(Path folder) throws IOException {
+        write(folder, FILE);
+    }
+
+    /** As {@link #write(Path)}, to a file of another name. */
+    public void write(Path folder, String fileName) throws IOException {
         Files.createDirectories(folder);
         String text = "bbox=" + bbox.west() + "," + bbox.south() + "," + bbox.east() + "," + bbox.north() + "\n"
                 + "year=" + year + "\n"
@@ -50,9 +60,9 @@ public record StackArea(BoundingBox bbox, int year, String tile, PixelGrid grid,
                 + "grid=" + formatGrid(grid) + "\n"
                 + "maskGrid=" + formatGrid(maskGrid) + "\n";
         // Written aside and renamed, so a run stopped halfway never leaves a half-written file.
-        Path part = folder.resolve(FILE + ".part");
+        Path part = folder.resolve(fileName + ".part");
         Files.writeString(part, text, StandardCharsets.UTF_8);
-        Files.move(part, folder.resolve(FILE), java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+        Files.move(part, folder.resolve(fileName), java.nio.file.StandardCopyOption.REPLACE_EXISTING,
                 java.nio.file.StandardCopyOption.ATOMIC_MOVE);
     }
 

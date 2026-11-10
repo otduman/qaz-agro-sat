@@ -8,8 +8,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.TreeMap;
 import java.util.function.Consumer;
 import kz.kazagrosat.core.fields.LandLabel;
 import kz.kazagrosat.core.geo.LonLat;
@@ -26,6 +29,13 @@ import kz.kazagrosat.pipeline.cog.CogReader;
 import kz.kazagrosat.pipeline.cog.FileByteSource;
 import kz.kazagrosat.pipeline.fields.FieldsGeoJson;
 import kz.kazagrosat.pipeline.fields.StackImages;
+import kz.kazagrosat.pipeline.landsat.LandsatAdjustment;
+import kz.kazagrosat.pipeline.landsat.LandsatAdjustment.Measure;
+import kz.kazagrosat.pipeline.landsat.LandsatDay;
+import kz.kazagrosat.pipeline.landsat.LandsatEntry;
+import kz.kazagrosat.pipeline.landsat.LandsatFolder;
+import kz.kazagrosat.pipeline.landsat.LandsatGrid;
+import kz.kazagrosat.pipeline.landsat.LandsatQa;
 import kz.kazagrosat.pipeline.stack.Layer;
 import kz.kazagrosat.pipeline.stack.SeasonStack;
 import kz.kazagrosat.pipeline.stack.StackEntry;
@@ -39,6 +49,11 @@ import kz.kazagrosat.pipeline.stack.StackEntry;
  * clear as in the field boundaries ({@link StackImages}): the cloud mask allows it, the snow test finds
  * no snow and the bands have values. The 20 m SWIR bands are repeated onto the 10 m grid; any 20 m pixel
  * that reaches the interior still lies at least 10 m inside the field.
+ *
+ * <p>With a {@link LandsatInput}, each Landsat 8 and 9 satellite-day adds a row per field too. Each 10 m interior
+ * pixel takes the Landsat pixel its centre falls in; scenes of one satellite and day are joined; a pixel is clear when
+ * the quality flags say so ({@link LandsatQa}) and the snow test finds no snow; values are put on the Sentinel-2 scale
+ * by the {@link LandsatAdjustment}, pixel by pixel, before the medians. This is how the adjustment was fitted.
  */
 public final class SeriesBuilder {
 
@@ -48,10 +63,32 @@ public final class SeriesBuilder {
     public static final double MIN_CLEAR_SHARE = 0.6;
     private static final double[] QUARTILES = {0.25, 0.5, 0.75};
 
+    /** Where a series takes its Landsat rows from, and how it puts them on the Sentinel-2 scale. */
+    public record LandsatInput(LandsatFolder folder, LandsatAdjustment adjustment) {}
+
+    private static final int L_BLUE = 0;
+    private static final int L_GREEN = 1;
+    private static final int L_RED = 2;
+    private static final int L_NIR = 3;
+    private static final int L_SWIR16 = 4;
+    private static final int L_SWIR22 = 5;
+    private static final int QA_FILL = 1;
+    private static final int QA_SNOW = 1 << 5;
+
     private SeriesBuilder() {}
 
     public static Series build(SeasonStack stack, Path fieldsFolder, Consumer<String> progress)
             throws IOException, InterruptedException {
+        return build(stack, fieldsFolder, null, progress);
+    }
+
+    /** @param landsat where to take Landsat rows from, or null for Sentinel-2 rows only */
+    public static Series build(SeasonStack stack, Path fieldsFolder, LandsatInput landsat, Consumer<String> progress)
+            throws IOException, InterruptedException {
+        if (landsat != null && !landsat.folder().area().equals(stack.area())) {
+            throw new IllegalArgumentException("The Landsat folder was downloaded for " + landsat.folder().area()
+                    + ", not for this stack's " + stack.area() + ". Run the landsat command on this stack.");
+        }
         int year = stack.area().year();
         PixelGrid grid = stack.area().grid();
         PixelGrid maskGrid = stack.area().maskGrid();
@@ -98,9 +135,123 @@ public final class SeriesBuilder {
                 }
             }
         }
+        List<String> landsatDays = new ArrayList<>();
+        if (landsat != null) {
+            Map<String, List<LandsatEntry>> days = new TreeMap<>();
+            for (LandsatEntry entry : landsat.folder().entries()) {
+                if (entry.status() == LandsatEntry.Status.STORED) {
+                    days.computeIfAbsent(entry.date() + " " + entry.satellite(), k -> new ArrayList<>()).add(entry);
+                }
+            }
+            int d = 0;
+            for (Map.Entry<String, List<LandsatEntry>> day : days.entrySet()) {
+                progress.accept(String.format(Locale.ROOT, "Landsat day %d of %d: %s", ++d, days.size(), day.getKey()));
+                LandsatBands bands = LandsatBands.read(landsat, day.getValue(), grid);
+                LandsatEntry first = day.getValue().getFirst();
+                for (int f = 0; f < fields.size(); f++) {
+                    if (fields.get(f).inSeries()) {
+                        rowsOf.get(f).add(landsatRow(fields.get(f).id(), first.date(), first.satellite(),
+                                interiorOf.get(f), bands));
+                    }
+                }
+                landsatDays.add(day.getKey());
+            }
+            Comparator<SeriesRow> order = Comparator.comparing(SeriesRow::date)
+                    .thenComparing(r -> !r.satellite().equals(SeriesRow.SENTINEL_2))
+                    .thenComparing(SeriesRow::satellite);
+            rowsOf.forEach(list -> list.sort(order));
+        }
         List<SeriesRow> rows = new ArrayList<>();
         rowsOf.forEach(rows::addAll);
-        return new Series(year, stack.area().tile(), dates, withInteriors, rows);
+        return new Series(year, stack.area().tile(), dates, withInteriors, rows, List.copyOf(landsatDays),
+                landsat == null ? null : landsat.adjustment().source());
+    }
+
+    private static SeriesRow landsatRow(String field, LocalDate date, String satellite, int[] interior,
+                                        LandsatBands b) {
+        double nan = Double.NaN;
+        if (interior.length == 0) {
+            return new SeriesRow(field, date, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,
+                    satellite);
+        }
+        int clear = 0;
+        int snow = 0;
+        for (int i : interior) {
+            if (b.clear[i]) {
+                clear++;
+            }
+            if (b.snow[i]) {
+                snow++;
+            }
+        }
+        double clearShare = (double) clear / interior.length;
+        double snowShare = (double) snow / interior.length;
+        if (clearShare < MIN_CLEAR_SHARE) {
+            return new SeriesRow(field, date, clearShare, nan, nan, nan, nan, nan, nan, nan, nan, nan, snowShare,
+                    nan, nan, nan, satellite);
+        }
+        double[] ndvi = Percentiles.of(b.ndvi, interior, b.clear, QUARTILES);
+        return new SeriesRow(field, date, clearShare, ndvi[0], ndvi[1], ndvi[2],
+                median(b.b11, interior, b.clear), median(b.b12, interior, b.clear),
+                median(b.ndti, interior, b.clear), median(b.nir, interior, b.clear), nan,
+                median(b.blue, interior, b.clear), snowShare, nan, nan, nan, satellite);
+    }
+
+    /** One Landsat satellite-day on the 10 m grid, adjusted to the Sentinel-2 scale, with its clear and snow flags. */
+    private record LandsatBands(float[] ndvi, float[] b11, float[] b12, float[] ndti, float[] nir, float[] blue,
+                                boolean[] clear, boolean[] snow) {
+
+        static LandsatBands read(LandsatInput input, List<LandsatEntry> scenes, PixelGrid grid)
+                throws IOException, InterruptedException {
+            int pixels = grid.width() * grid.height();
+            LandsatDay day = new LandsatDay(pixels, LandsatFolder.BANDS.size());
+            boolean[] qaSnow = new boolean[pixels];
+            for (LandsatEntry scene : scenes) {
+                LandsatFolder.Layer qa = input.folder().raw(scene, LandsatFolder.QA);
+                if (qa.grid().epsg() != grid.epsg()) {
+                    throw new IOException(scene.scene() + " is on EPSG " + qa.grid().epsg() + ", not the stack's "
+                            + grid.epsg());
+                }
+                PixelWindow whole = new PixelWindow(0, 0, qa.grid().width(), qa.grid().height());
+                int[] lookup = LandsatGrid.lookup(grid, qa.grid(), whole);
+                float[][] values = new float[LandsatFolder.BANDS.size()][];
+                for (int band = 0; band < values.length; band++) {
+                    values[band] = input.folder().reflectance(scene, LandsatFolder.BANDS.get(band));
+                }
+                day.add(lookup, qa.values(), values);
+                for (int i = 0; i < pixels; i++) {
+                    int k = lookup[i];
+                    if (k >= 0 && (qa.values()[k] & QA_SNOW) != 0 && (qa.values()[k] & QA_FILL) == 0) {
+                        qaSnow[i] = true;
+                    }
+                }
+            }
+            boolean[] clear = day.clear();
+            float[] green = day.band(L_GREEN);
+            float[] red = day.band(L_RED);
+            float[] nir = day.band(L_NIR);
+            float[] swir16 = day.band(L_SWIR16);
+            float[] swir22 = day.band(L_SWIR22);
+            float[] blue = day.band(L_BLUE);
+            boolean[] snowTest = SnowTest.snow(green, nir, swir16);
+            boolean[] snow = new boolean[pixels];
+            LandsatAdjustment fit = input.adjustment();
+            float[] ndvi = Ndvi.compute(red, nir);
+            // Adjusted in place, so the day takes no more memory than it already does; green is not needed after
+            // the snow test, so it holds NDTI.
+            float[] ndti = green;
+            for (int i = 0; i < pixels; i++) {
+                snow[i] = qaSnow[i] || (snowTest[i] && clear[i]);
+                clear[i] &= !snowTest[i];
+                ndvi[i] = (float) fit.apply(Measure.NDVI, ndvi[i]);
+                swir16[i] = (float) fit.apply(Measure.B11, swir16[i]);
+                swir22[i] = (float) fit.apply(Measure.B12, swir22[i]);
+                nir[i] = (float) fit.apply(Measure.NIR, nir[i]);
+                blue[i] = (float) fit.apply(Measure.BLUE, blue[i]);
+                ndti[i] = (swir16[i] - swir22[i]) / (swir16[i] + swir22[i]);
+            }
+            return new LandsatBands(ndvi, swir16, swir22, ndti, nir, blue, clear, snow);
+        }
     }
 
     private static SeriesRow row(String field, LocalDate date, int[] interior, DateBands b, PixelGrid grid) {

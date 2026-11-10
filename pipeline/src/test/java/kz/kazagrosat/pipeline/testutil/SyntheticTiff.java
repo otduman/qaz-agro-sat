@@ -48,6 +48,8 @@ public final class SyntheticTiff {
     private double pixelSize = 10;
     private String nodata = "0";
     private boolean corruptTiles;
+    private boolean geographic;
+    private SyntheticTiff overview;
 
     public SyntheticTiff(int width, int height, int tileWidth, int tileHeight) {
         this.width = width;
@@ -69,6 +71,15 @@ public final class SyntheticTiff {
     public SyntheticTiff sparseTile(int index) { sparseTiles.add(index); return this; }
     public SyntheticTiff corruptTiles() { corruptTiles = true; return this; }
 
+    /** Names the coordinate system with the geographic key (lon/lat, as ESA WorldCover does) instead of the projected one. */
+    public SyntheticTiff geographic() { geographic = true; return this; }
+
+    /**
+     * Chains a reduced-resolution copy after this image's directory, as a COG's overviews are: its own
+     * directory, without GeoTIFF tags. The overview's own overviews are chained after it in turn.
+     */
+    public SyntheticTiff overview(SyntheticTiff value) { overview = value; return this; }
+
     /** Stores these bytes as every tile, before compression, instead of encoding the pixels. */
     public SyntheticTiff rawTile(byte[] value) { rawTile = value; return this; }
 
@@ -81,6 +92,30 @@ public final class SyntheticTiff {
     }
 
     public byte[] build() {
+        int ifdStart = 8 + ghostBytes;
+        List<byte[]> segments = new ArrayList<>();
+        int position = ifdStart;
+        for (SyntheticTiff image = this; image != null; image = image.overview) {
+            boolean last = image.overview == null;
+            byte[] first = image.segment(position, 0, image == this);
+            byte[] segment = last ? first : image.segment(position, position + first.length, image == this);
+            segments.add(segment);
+            position += segment.length;
+        }
+        ByteBuffer file = ByteBuffer.allocate(position).order(order);
+        file.put(order == ByteOrder.LITTLE_ENDIAN ? (byte) 'I' : (byte) 'M');
+        file.put(order == ByteOrder.LITTLE_ENDIAN ? (byte) 'I' : (byte) 'M');
+        file.putShort((short) magic);
+        file.putInt(ifdStart);
+        file.position(ifdStart);
+        for (byte[] segment : segments) {
+            file.put(segment);
+        }
+        return file.array();
+    }
+
+    /** One image's directory, its out-of-line values and its tiles, laid out to start at {@code base}. */
+    private byte[] segment(int base, int nextDirectory, boolean withGeoTags) {
         int across = (width + tileWidth - 1) / tileWidth;
         int down = (height + tileHeight - 1) / tileHeight;
         byte[][] tiles = new byte[across * down][];
@@ -95,9 +130,8 @@ public final class SyntheticTiff {
         long[] offsets = new long[tiles.length];
 
         // Placeholder offsets give the layout its final size; real values are filled in below.
-        List<Entry> entries = entries(offsets, counts);
-        int ifdStart = 8 + ghostBytes;
-        int valuesStart = ifdStart + 2 + entries.size() * 12 + 4;
+        List<Entry> entries = entries(offsets, counts, withGeoTags);
+        int valuesStart = base + 2 + entries.size() * 12 + 4;
         int dataStart = valuesStart;
         for (Entry entry : entries) {
             dataStart += entry.value().length > 4 ? entry.value().length : 0;
@@ -107,14 +141,9 @@ public final class SyntheticTiff {
             offsets[i] = tiles[i].length == 0 ? 0 : position;
             position += tiles[i].length;
         }
-        entries = entries(offsets, counts);
+        entries = entries(offsets, counts, withGeoTags);
 
-        ByteBuffer file = ByteBuffer.allocate(position).order(order);
-        file.put(order == ByteOrder.LITTLE_ENDIAN ? (byte) 'I' : (byte) 'M');
-        file.put(order == ByteOrder.LITTLE_ENDIAN ? (byte) 'I' : (byte) 'M');
-        file.putShort((short) magic);
-        file.putInt(ifdStart);
-        file.position(ifdStart);
+        ByteBuffer file = ByteBuffer.allocate(position - base).order(order);
         file.putShort((short) entries.size());
         int valuePosition = valuesStart;
         for (Entry entry : entries) {
@@ -124,7 +153,7 @@ public final class SyntheticTiff {
             if (entry.value().length > 4) {
                 file.putInt(valuePosition);
                 int resume = file.position();
-                file.position(valuePosition);
+                file.position(valuePosition - base);
                 file.put(entry.value());
                 file.position(resume);
                 valuePosition += entry.value().length;
@@ -134,15 +163,15 @@ public final class SyntheticTiff {
                 file.put(inline);
             }
         }
-        file.putInt(0);
-        file.position(dataStart);
+        file.putInt(nextDirectory);
+        file.position(dataStart - base);
         for (byte[] tile : tiles) {
             file.put(tile);
         }
         return file.array();
     }
 
-    private List<Entry> entries(long[] offsets, long[] counts) {
+    private List<Entry> entries(long[] offsets, long[] counts, boolean withGeoTags) {
         List<Entry> list = new ArrayList<>();
         list.add(new Entry(256, LONG, 1, longs(width)));
         list.add(new Entry(257, LONG, 1, longs(height)));
@@ -156,13 +185,15 @@ public final class SyntheticTiff {
         list.add(new Entry(324, LONG, offsets.length, longs(offsets)));
         list.add(new Entry(325, LONG, counts.length, longs(counts)));
         list.add(new Entry(339, SHORT, 1, shorts(sampleFormat)));
-        list.add(new Entry(33550, DOUBLE, 3, doubles(pixelSize, pixelSize, 0)));
-        list.add(new Entry(33922, DOUBLE, 6, doubles(0, 0, 0, originX, originY, 0)));
-        list.add(new Entry(34735, SHORT, 16, shorts(
-                1, 1, 0, 3,
-                1024, 0, 1, 1,
-                1025, 0, 1, 1,
-                3072, 0, 1, epsg)));
+        if (withGeoTags) {
+            list.add(new Entry(33550, DOUBLE, 3, doubles(pixelSize, pixelSize, 0)));
+            list.add(new Entry(33922, DOUBLE, 6, doubles(0, 0, 0, originX, originY, 0)));
+            list.add(new Entry(34735, SHORT, 16, shorts(
+                    1, 1, 0, 3,
+                    1024, 0, 1, geographic ? 2 : 1,
+                    1025, 0, 1, 1,
+                    geographic ? 2048 : 3072, 0, 1, epsg)));
+        }
         byte[] text = (nodata + "\0").getBytes(StandardCharsets.US_ASCII);
         list.add(new Entry(42113, ASCII, text.length, text));
         return list;

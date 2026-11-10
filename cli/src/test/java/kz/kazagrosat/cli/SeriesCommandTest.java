@@ -10,7 +10,9 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import kz.kazagrosat.pipeline.stack.StackArea;
+import kz.kazagrosat.pipeline.stack.SeasonStack;
 import kz.kazagrosat.pipeline.testutil.HandFields;
+import kz.kazagrosat.pipeline.testutil.HandLandsat;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -135,5 +137,59 @@ class SeriesCommandTest {
         try (java.util.stream.Stream<Path> files = Files.list(fields)) {
             assertEquals(before, files.map(p -> p.getFileName().toString()).sorted().toList());
         }
+    }
+
+    private Path landsatFolder() throws Exception {
+        Path landsat = folder.resolve("landsat");
+        new HandLandsat(landsat, SeasonStack.open(stack).area())
+                .scene("LC09_L2SP_160023_20250720_02_T1", "2025-07-20", (c, r) -> HandLandsat.CLEAR).finish();
+        return landsat;
+    }
+
+    @Test
+    void addsLandsatRowsWithTheLandsatOption() throws Exception {
+        Path landsat = landsatFolder();
+
+        assertEquals(0, run("series", "--stack", stack.toString(), "--fields", fields.toString(),
+                "--landsat", landsat.toString(), "--out", series.toString()), stderr());
+
+        assertTrue(stdout().contains("Landsat: 1 satellite-days, adjusted by the built-in fit"), stdout());
+        assertTrue(Files.readAllLines(series.resolve("series-2025.csv")).stream().anyMatch(l -> l.endsWith(",LC09")));
+    }
+
+    @Test
+    void readsAnotherFitFile() throws Exception {
+        Path landsat = landsatFolder();
+        Path fit = folder.resolve("my-fit.csv");
+        Files.writeString(fit, """
+                measure,slope,intercept,pairs,fitted_on
+                ndvi_median,1.0,0,1,x
+                b11,1.0,0,1,x
+                b12,1.0,0,1,x
+                nir,1.0,0,1,x
+                blue,1.0,0,1,x
+                """);
+
+        assertEquals(0, run("series", "--stack", stack.toString(), "--fields", fields.toString(),
+                "--landsat", landsat.toString(), "--landsat-fit", fit.toString(), "--out", series.toString()),
+                stderr());
+
+        assertTrue(Files.readString(series.resolve("summary-2025.txt")).contains("my-fit.csv"));
+    }
+
+    @Test
+    void aFitFileNeedsLandsat() {
+        assertEquals(2, run("series", "--stack", stack.toString(), "--fields", fields.toString(),
+                "--landsat-fit", "fit.csv", "--out", series.toString()));
+
+        assertTrue(stderr().contains("--landsat-fit needs --landsat"), stderr());
+    }
+
+    @Test
+    void aMissingLandsatFolderFails() {
+        assertEquals(1, run("series", "--stack", stack.toString(), "--fields", fields.toString(),
+                "--landsat", folder.resolve("nowhere").toString(), "--out", series.toString()));
+
+        assertTrue(stderr().contains("is not a Landsat folder"), stderr());
     }
 }
