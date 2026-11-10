@@ -30,3 +30,16 @@
 
 Rule v1 is about 2/3 right within one photo on hand readings; a third of fields have no dated cut; October rises
 may be tillage (three of holder A's 2024 fields dated 16-30 Oct); holders are 2026's; no ground truth.
+
+## Photo check of holder A, 2024
+
+Strips from `FieldStudy strips` for holder A's 12 dated fields and its largest undated one; 9 read by eye
+(`data/kokshetau/holders/readings-a-2024.csv`). The rule's dates were known before reading, so this is not blind.
+
+- The late harvest is real: on the 1,222 ha joined region strips were cut one by one from 16 Sep and the last turned
+  pale between 3 and 16 Oct; swath lines on two other large fields appear 26 Sep to 1 Oct. One 614 ha field was cut
+  from 18 Sep, as dated.
+- Three October dates were false (fields of 25, 58 and 69 ha; the last bare all season): a very bright 16 Oct photo
+  (and a hazy 13 Oct one) faked the rise. A fourth (395 ha) is unclear for the same reason.
+- Without the three false fields the halfway date is 30 Sep, about two weeks after the square's 17 Sep.
+- Lesson for the dating step: late-season photos need a screen (brightness or snow/frost check) before dates are used.
