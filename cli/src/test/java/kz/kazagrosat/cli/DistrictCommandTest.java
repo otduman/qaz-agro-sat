@@ -55,6 +55,18 @@ class DistrictCommandTest {
     }
 
     @Test
+    void joinWorksBeforeAnySquareIsDone() throws Exception {
+        run("district", "plan", "--boundary", boundary.toString(), "--out", folder.resolve("d").toString());
+
+        int code = run("district", "join", "--district", folder.resolve("d").toString(), "--year", "2026");
+
+        assertEquals(0, code, err.toString(StandardCharsets.UTF_8));
+        assertTrue(out.toString(StandardCharsets.UTF_8).contains("Joined:  0 squares, 0 fields"),
+                out.toString(StandardCharsets.UTF_8));
+        assertTrue(Files.exists(folder.resolve("d").resolve("district-summary-2026.txt")));
+    }
+
+    @Test
     void districtNeedsASubcommand() {
         assertEquals(2, run("district", "--out", "x"));
     }

@@ -39,6 +39,7 @@ import kz.kazagrosat.pipeline.stac.StacItem;
 import kz.kazagrosat.pipeline.stac.StacSearch;
 import kz.kazagrosat.core.geo.DistrictPlan;
 import kz.kazagrosat.pipeline.district.District;
+import kz.kazagrosat.pipeline.district.DistrictJoin;
 import kz.kazagrosat.pipeline.district.DistrictRunner;
 import kz.kazagrosat.pipeline.harvest.Harvest;
 import kz.kazagrosat.pipeline.harvest.HarvestReport;
@@ -100,6 +101,10 @@ public final class Main {
                   Runs season, fields, landsat, series and harvest for every square (or
                   the ones listed), one at a time, skipping squares already done. Logs
                   time and disk per step in FOLDER/run-YYYY.csv.
+
+              district join --district FOLDER --year YYYY
+                  Joins the squares done so far into one field table and a summary with
+                  each square's checks, counting every field once.
 
             The scenes, ndvi, season and landsat commands accept --stac-url URL to use
             a different STAC API; landsat also takes --token-url URL.
@@ -230,7 +235,7 @@ public final class Main {
 
     private static Command district(String[] args) {
         if (args.length < 2 || args[1].startsWith("--")) {
-            throw new IllegalArgumentException("district needs plan or run, such as: district plan --boundary FILE"
+            throw new IllegalArgumentException("district needs plan, run or join, such as: district plan --boundary FILE"
                     + " --out FOLDER");
         }
         String[] rest = java.util.Arrays.copyOfRange(args, 1, args.length);
@@ -269,8 +274,22 @@ public final class Main {
                     return report.failed().isEmpty() ? 0 : 1;
                 };
             }
+            case "join" -> {
+                allowOnly(options, Set.of("--district", "--year"));
+                Path folder = Path.of(require(options, "--district"));
+                int year = parseYear(require(options, "--year"));
+                yield (out, err) -> {
+                    DistrictJoin.Result result = DistrictJoin.join(folder, year);
+                    out.println(text("Joined:  %d squares, %d fields", result.squares(), result.fields()));
+                    out.println(text("Overlap: %d of %d fields seen by two squares got the same cut window",
+                            result.overlapAgree(), result.overlapPairs()));
+                    out.println("Wrote:   " + folder.resolve("district-harvest-" + year + ".csv"));
+                    out.println("         " + folder.resolve("district-summary-" + year + ".txt"));
+                    return 0;
+                };
+            }
             default -> throw new IllegalArgumentException("Unknown district command: " + args[1]
-                    + ". Use plan or run.");
+                    + ". Use plan, run or join.");
         };
     }
 
