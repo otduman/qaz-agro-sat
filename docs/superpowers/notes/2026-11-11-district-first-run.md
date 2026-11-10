@@ -40,3 +40,20 @@ Of the 117,139 ha with no cut found, 63% had no gap over 15 days after ripening:
 the B11 rise was small (biggest rise 1-3 points on 67% of that area; 3-3.5 on 16%). Gradual cutting, swathing.
 Texture (`line_strength`) is a weak sign on its own: across dated cuts it changes by +0.03 at the median (+0.32 at
 the 90th percentile) against 0.00 (+0.12) on other date pairs. Not used; a texture rule needs its own test.
+
+## 2025 run and the held-out test of the crop gate (2026-11-11)
+
+- 2025: the same 10 core squares, all steps exit 0 (owner's terminal run, `run-2025.csv`). Joined: 2,158 fields,
+  225,321 ha; dated 63% of the area; overlap check 81 of 83; halfway dates 11-21 September.
+- 2026 rejoined with all 14 squares (the four partly covered ones added): 2,533 fields; overlap check 85 of 95.
+- Crop gate (commit a844774, frozen before any 2025 result), `tools/judge_gate_2025.sh`, output
+  `data/tayynsha/gate-test-2025.txt`: bare fallow with a cut 14 of 44 -> 6 of 44; field regions turned "no crop seen"
+  6 of 2,631. It passes on data it never saw. The joined tables still use the ungated program (as on `main`).
+
+## Holders and the two-season lead list
+
+Plot cards read in the owner's Chrome for three squares: E560N5960 (79% of field area), E520N5960 (78%), E540N5960
+(51% so far). `tools/holders.py` -> `holders.csv`; `tools/lead_list.py ... 2026 2025` -> `lead-list.csv`. Names stay
+in `data/`. Of 22 companies with a counted season, two are late in both seasons with sizable area (about 5,600 ha:
++5 and +10 days behind neighbours within 20 km; about 3,800 ha: +11 and +4); the largest (about 13,300 ha) is early in
+both (-13, -15). Several companies are late in one season only (e.g. +21 then 0).
