@@ -199,7 +199,7 @@ def test_tayynsha_build_privacy():
         return
     d = district_data.build('data/tayynsha', '2026', 'data/tayynsha/holders.csv', 'data/tayynsha/company-groups.csv',
                             'docs/districts/tayynsha.geojson', (69.764, 53.848), 701)
-    assert len(d["fields"]) == 3333, len(d["fields"])  # hybrid outlines, straight borders, holders via shared borders, readability joins, duplicates dropped, joins v3, islands folded
+    assert len(d["fields"]) == 2792, len(d["fields"])  # small fields joined, hybrid outlines, straight borders, holders via shared borders, readability joins, duplicates dropped, joins v3, islands folded
     assert all(f['h'] is None for f in d['fields'] if f['k'] in ('farm', 'private', 'lease', 'college'))
     assert d['totals']['group_ha'] > 0
     # 'known holder' leaves out land whose holder the map hides: group share as published (about 42%)
