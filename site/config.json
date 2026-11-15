@@ -1,0 +1,71 @@
+{
+  "title": {
+    "ru": "QazAgroSat",
+    "en": "QazAgroSat"
+  },
+  "author": null,
+  "languages": [
+    "ru",
+    "en"
+  ],
+  "default_language": "ru",
+  "year": "2026",
+  "groups_csv": "data/tayynsha/company-groups.csv",
+  "content_dir": "data/site/content",
+  "districts": [
+    {
+      "id": "tayynsha",
+      "data_dir": "data/tayynsha",
+      "boundary": "docs/districts/tayynsha.geojson",
+      "town": [
+        69.764,
+        53.848
+      ],
+      "ha_per_combine": 701,
+      "crops_name": "crops-{year}-v2.csv",
+      "years": [
+        "2026",
+        "2025"
+      ]
+    },
+    {
+      "id": "sandyktau",
+      "data_dir": "data/sandyktau",
+      "boundary": "docs/districts/sandyktau.geojson",
+      "town": [
+        68.751,
+        52.533
+      ],
+      "ha_per_combine": null,
+      "crops_name": "crops-{year}-v2.csv",
+      "years": [
+        "2026",
+        "2025"
+      ]
+    },
+    {
+      "id": "esil",
+      "data_dir": "data/esil-akmola",
+      "boundary": "docs/districts/esil-akmola.geojson",
+      "town": [
+        66.3536,
+        52.227
+      ],
+      "ha_per_combine": null,
+      "crops_name": "crops-{year}-v2.csv",
+      "plots": [
+        "data/esil-akmola/zarechny-plot-027006.geojson"
+      ],
+      "holders_read": false,
+      "years": [
+        "2026",
+        "2025",
+        "2024"
+      ]
+    }
+  ],
+  "subtitle": {
+    "ru": "Атлас полей",
+    "en": "Field Atlas"
+  }
+}

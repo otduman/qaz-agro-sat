@@ -21,7 +21,10 @@ for r in rows:
         continue
     x = round(700 + (float(r['map_east']) - e0) / s)
     y = round(300 + (n0 - float(r['map_north'])) / s)
-    bad = not (300 <= x <= 1430 and 115 <= y <= 645) or (300 <= x <= 730 and y <= 245) or (x >= 1360 and y >= 560)
+    # Clear map area of the 1536 x 674 view (2026-11-11): not the search panel and region selector (which slides
+    # right to x ~1015 while the panel is open), the toolbar, the readout box.
+    bad = not (300 <= x <= 1440 and 115 <= y <= 640) or (x <= 1020 and y <= 185) or (x >= 1370 and y >= 560) \
+        or (x <= 365 and y >= 595)
     (out if bad else ok).append(f"{r['field'][5:]}:{x},{y}")
 print('here', len(ok), ' '.join(ok))
 print('elsewhere', len(out), ' '.join(out))

@@ -17,7 +17,8 @@ import kz.kazagrosat.core.raster.PixelGrid;
  *       ({@link LineStrength}) are raised to at least the calm level, so faint field borders stop markers;</li>
  *   <li>marker-based watershed on the season edge;</li>
  *   <li>per-region NDVI sums on every date (a second read of the season);</li>
- *   <li>merging of neighbours with weak borders and matching curves;</li>
+ *   <li>merging of neighbours with weak borders and matching curves, then joining pieces of a field cut off
+ *       by crooked borders such as wet hollows ({@link PieceJoiner});</li>
  *   <li>dropping regions under {@code minRegionHectares} and filling holes under {@code maxHoleHectares};</li>
  *   <li>a land label and a uniformity score per region.</li>
  * </ol>
@@ -45,7 +46,9 @@ public final class FieldFinder {
                     p.brightnessWeight()));
             progress.accept(String.format(Locale.ROOT, "Edges: %s (%d of %d)", dates.get(d), d + 1, dates.size()));
         }
-        float[] edges = liftLines(gathered.result(), width, height, p);
+        float[] seasonEdges = gathered.result();
+        float[] lines = LineStrength.of(seasonEdges, width, height, p.lineRadius());
+        float[] edges = liftLines(seasonEdges, lines, p);
 
         int[] watershed = Watershed.flood(edges, width, height, p);
         int regionCount = max(watershed);
@@ -58,14 +61,26 @@ public final class FieldFinder {
             progress.accept(String.format(Locale.ROOT, "Regions: %s (%d of %d)", dates.get(d), d + 1, dates.size()));
         }
 
-        int[] newIdOf = RegionMerger.merge(watershed, edges, width, height, series, counts(watershed, regionCount),
-                p);
+        int[] firstIdOf = RegionMerger.merge(watershed, edges, width, height, series,
+                counts(watershed, regionCount), p);
+        int firstCount = max(firstIdOf);
+        int[] firstPass = new int[pixels];
+        for (int i = 0; i < pixels; i++) {
+            firstPass[i] = firstIdOf[watershed[i]];
+        }
+        int[] pieceIdOf = PieceJoiner.join(firstPass, lines, width, height, series.combine(firstIdOf, firstCount),
+                counts(firstPass, firstCount), grid.pixelSize(), p);
+        int[] newIdOf = new int[regionCount + 1];
+        for (int r = 1; r <= regionCount; r++) {
+            newIdOf[r] = pieceIdOf[firstIdOf[r]];
+        }
         int mergedCount = max(newIdOf);
         int[] merged = new int[pixels];
         for (int i = 0; i < pixels; i++) {
             merged[i] = newIdOf[watershed[i]];
         }
-        progress.accept("Merged: " + (regionCount - mergedCount) + " merges, " + mergedCount + " regions left");
+        progress.accept("Merged: " + (regionCount - firstCount) + " merges, " + (firstCount - mergedCount)
+                + " pieces joined to their field, " + mergedCount + " regions left");
 
         int minPixels = FieldParameters.pixels(p.minRegionHectares(), grid.pixelSize());
         int[] mergedPixels = counts(merged, mergedCount);
@@ -126,8 +141,7 @@ public final class FieldFinder {
     }
 
     /** Raises the season edge of pixels on a long straight line to at least the calm level. */
-    static float[] liftLines(float[] seasonEdges, int width, int height, FieldParameters p) {
-        float[] lines = LineStrength.of(seasonEdges, width, height, p.lineRadius());
+    static float[] liftLines(float[] seasonEdges, float[] lines, FieldParameters p) {
         float[] lifted = seasonEdges.clone();
         for (int i = 0; i < lifted.length; i++) {
             if (lines[i] >= p.lineEdge()) {

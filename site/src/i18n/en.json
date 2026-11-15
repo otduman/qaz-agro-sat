@@ -1,0 +1,142 @@
+{
+  "lang_name": "English",
+  "lang_short": "EN",
+  "nav": {
+    "district": "District",
+    "language": "Language",
+    "load_error": "Could not load the data. Check the connection and click again.",
+    "year": "Season"
+  },
+  "districts": {
+    "tayynsha": "Tayynsha",
+    "sandyktau": "Sandyktau",
+    "esil": "Esil"
+  },
+  "towns": {
+    "tayynsha": "Tayynsha",
+    "sandyktau": "Balkashino",
+    "esil": "Zarechnoye"
+  },
+  "sections": {
+    "stats": "Key figures",
+    "map": "The district field by field",
+    "accounts": "Companies in the surveyed squares",
+    "charts": "In numbers",
+    "pace": "Harvest pace",
+    "trust": "What is solid here, and what is an estimate",
+    "sources": "Sources"
+  },
+  "map": {
+    "aria": "Map of the district's fields",
+    "modes_aria": "What colours the fields",
+    "crop": "Crop",
+    "time": "Harvest date",
+    "satellite": "Satellite",
+    "zoom_in": "Zoom in",
+    "zoom_out": "Zoom out",
+    "reset": "Show all",
+    "km": "km",
+    "pick": "Pick a field",
+    "pick_hint": "Its area, crop, harvest date and land user will show here.",
+    "field": "Field",
+    "ha": "ha",
+    "thousand_ha": "k ha",
+    "imagery_credit": "Image: Copernicus Sentinel-2, July 2026",
+    "loading": "Loading…",
+    "plot_line": "Company plot from the cadastre"
+  },
+  "panel": {
+    "crop": "Crop",
+    "harvest": "Harvest",
+    "holder": "Land user"
+  },
+  "legend": {
+    "crop_title": "Crop group",
+    "crop_hint": "Early crops ripen and dry by mid-August. Oilseeds (flax, sunflower, rapeseed) stay green into September or flower yellow.",
+    "grain": "Cereals and pulses",
+    "oilseed": "Oilseeds",
+    "other": "Grass, hay",
+    "none": "No crop seen",
+    "time_title": "When the satellite saw the harvest",
+    "time_hint": "The middle of the gap between the images before and after the cut. Grey: no lasting trace of a harvest in the images (often a harvest after rain).",
+    "t1": "before 10 August",
+    "t2": "11–20 August",
+    "t3": "21–31 August",
+    "t4": "1–10 September",
+    "t5": "after 10 September",
+    "t0": "no harvest trace",
+    "fallow": "Fallow (not sown this season)"
+  },
+  "harvest": {
+    "dated": "Harvested between {from} and {to}",
+    "cloud": "Harvested between {from} and {to} (clouds hid the exact days)",
+    "nocrop": "No crop seen",
+    "none": "No lasting trace of a harvest in the images"
+  },
+  "months": [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec"
+  ],
+  "kinds": {
+    "group_chip": "group",
+    "farm": "Peasant farm or partnership (name not published)",
+    "private": "Private holder (name not published)",
+    "lease": "Joint lease",
+    "college": "State college",
+    "other": "Other holder",
+    "not_found": "Not found on the cadastral map",
+    "unread": "Not read"
+  },
+  "table": {
+    "company": "Company",
+    "fields_ha": "Fields, ha",
+    "grain": "Cereals",
+    "oilseed": "Oilseeds",
+    "avg": "Combines at the district average",
+    "modern": "Modern fleet",
+    "whole": "Whole farm, open data (in Russian)",
+    "group_mark": "group",
+    "show_all": "Show all ({n})",
+    "show_fewer": "Show fewer",
+    "pair_note": "Rows with two names are two registered companies with one name: the older farm and the group's newer partnership. Their fields are mixed together or both belong to the group, so their area is shown together."
+  },
+  "charts": {
+    "companies_title": "Largest companies by field area",
+    "companies_note": "Area inside the surveyed squares, thousand ha. Coloured: companies of the grain group; grey: the rest.",
+    "group": "Grain group",
+    "others": "Other companies",
+    "crops_title": "Crop mix: satellite against official figures",
+    "crops_note": "Shares of cereals, oilseeds and grass in the sown area, fields inside the district.",
+    "ours": "From images",
+    "official": "Official",
+    "sizes_title": "Average field size by kind of land user",
+    "sizes_note": "Average field area, ha, and number of fields.",
+    "size_group": "Grain group",
+    "size_company": "Other companies",
+    "size_farm": "Farms and private",
+    "size_unread": "Not read",
+    "fields_n": "fields",
+    "pace_aria": "Share of cereal area with a harvest visible from space",
+    "pace_all": "All fields",
+    "pace_group": "Grain group",
+    "pace_other": "Others",
+    "rain": "rain",
+    "pace_official": "official",
+    "companies_note_plain": "Area inside the surveyed squares, thousand ha."
+  },
+  "footer": {
+    "about": "An independent study from open data: satellite images, the public cadastral map and published sources.",
+    "author": "Author",
+    "updated": "Updated: November 2026"
+  }
+}

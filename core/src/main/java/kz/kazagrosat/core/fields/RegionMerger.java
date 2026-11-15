@@ -74,6 +74,14 @@ public final class RegionMerger {
     }
 
     private static boolean curvesMatch(RegionSeries series, int a, int b, int[] pixels, FieldParameters p) {
+        return curveGap(series, a, b, pixels, p) <= p.curveTolerance();
+    }
+
+    /**
+     * @return the rank-th highest gap between two regions' curves on the dates both have a value, or infinity
+     *         when they share fewer than {@code minCommonDates} (or {@code edgeRank}) such dates
+     */
+    static double curveGap(RegionSeries series, int a, int b, int[] pixels, FieldParameters p) {
         double[] gaps = new double[series.dates()];
         int common = 0;
         for (int d = 0; d < series.dates(); d++) {
@@ -84,13 +92,13 @@ public final class RegionMerger {
             }
         }
         if (common < p.minCommonDates() || common < p.edgeRank()) {
-            return false;
+            return Double.POSITIVE_INFINITY;
         }
         Arrays.sort(gaps, 0, common);
-        return gaps[common - p.edgeRank()] <= p.curveTolerance();
+        return gaps[common - p.edgeRank()];
     }
 
-    private static int find(int[] parent, int r) {
+    static int find(int[] parent, int r) {
         while (parent[r] != r) {
             parent[r] = parent[parent[r]];
             r = parent[r];

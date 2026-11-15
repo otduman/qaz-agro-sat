@@ -1,17 +1,19 @@
 """Builds data/tayynsha/holders.csv from every square's plot-clicks-<year>.csv and plot-cards-<year>.csv.
 Companies, cooperatives and state bodies are named; plots whose holder the map hides are labelled by plot.
-Run: python data/tayynsha/tools/holders.py 2026"""
+Run: python data/tayynsha/tools/holders.py 2026 [DISTRICT_DIR, default data/tayynsha]"""
 import csv, glob, os, sys
 from collections import defaultdict
 year = sys.argv[1]
-base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+base = sys.argv[2].rstrip('/') if len(sys.argv) > 2 else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 named = {'company', 'state college', 'cooperative'}
 rows, by = [], defaultdict(float)
 for clicks in sorted(glob.glob(f'{base}/E*/plot-clicks-{year}.csv')):
     sq = os.path.basename(os.path.dirname(clicks))
     cards = {r['plot']: r for r in csv.DictReader(open(f'{base}/{sq}/plot-cards-{year}.csv', encoding='utf-8'))}
-    area = {r['field']: float(r['area_ha']) for r in csv.DictReader(open(f'{base}/{sq}/owners-{year}.csv', encoding='utf-8-sig'))}
-    total = sum(float(r['area_ha']) for r in csv.DictReader(open(f'{base}/{sq}/owners-{year}.csv', encoding='utf-8-sig')) if r['land'] == 'field')
+    # field areas from the current field map (the owners sheet was made from the field map of its day)
+    table = list(csv.DictReader(open(f'{base}/{sq}/series-{year}/fields-{year}.csv', encoding='utf-8')))
+    area = {r['id']: float(r['area_ha']) for r in table}
+    total = sum(float(r['area_ha']) for r in table if r['land'] == 'field')
     linked = missing = 0.0
     for c in csv.DictReader(open(clicks, encoding='utf-8')):
         p = c['plot_clicked']

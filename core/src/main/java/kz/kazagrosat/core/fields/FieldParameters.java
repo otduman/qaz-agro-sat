@@ -18,6 +18,12 @@ import java.time.MonthDay;
  * @param ridgeWeak         neighbours merge only if the median ridge on their border is at most this
  * @param curveTolerance    neighbours merge only if the rank-th highest gap between their curves is at most this
  * @param minCommonDates    dates on which both neighbours need a value before they can merge
+ * @param pieceCurveTolerance a piece joins a neighbour, whatever the ridge between them, when the rank-th highest
+ *                          gap between their curves is at most this and their border is off straight lines
+ *                          (see {@link PieceJoiner})
+ * @param pieceLineEdge     ... and the median line strength on their border is under this
+ * @param pieceMaxHectares  a piece is at most this large
+ * @param pieceMaxShare     ... and at most this share of the neighbour it joins
  * @param minClearShare     share of a region's pixels that must be clear for its value on a date to count
  * @param minRegionHectares regions smaller than this are dropped
  * @param maxHoleHectares   holes smaller than this are filled
@@ -47,6 +53,10 @@ public record FieldParameters(
         double ridgeWeak,
         double curveTolerance,
         int minCommonDates,
+        double pieceCurveTolerance,
+        double pieceLineEdge,
+        double pieceMaxHectares,
+        double pieceMaxShare,
         double minClearShare,
         double minRegionHectares,
         double maxHoleHectares,
@@ -64,7 +74,7 @@ public record FieldParameters(
         double simplifyMetres) {
 
     public static final FieldParameters DEFAULTS = new FieldParameters(
-            5.0, 3, 0.15, 2, 50, 35, 0.025, 0.2, 0.05, 5, 0.6, 5.0, 1.0, 5,
+            5.0, 3, 0.15, 2, 50, 35, 0.025, 0.2, 0.05, 5, 0.10, 0.05, 60.0, 0.5, 0.6, 5.0, 1.0, 5,
             MonthDay.of(6, 15), 0.3, 0.5, MonthDay.of(6, 20), 0.2, MonthDay.of(9, 30),
             0.3, 0.7, 0.05, 0.25, 10.0);
 

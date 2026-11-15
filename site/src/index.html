@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>QazAgroSat · Атлас полей · Field Atlas</title>
+<meta name="description" content="Поля, культуры, сроки уборки и землепользователи по спутниковым снимкам и публичной кадастровой карте. Fields, crops, harvest dates and land users from satellite images and the public cadastral map.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:wght@500;600&family=Archivo:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap&subset=cyrillic">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="topbar">
+  <div class="topin">
+    <a class="brand" id="brand" href="#">QazAgroSat <span class="sub">Атлас полей</span></a>
+    <div class="switches">
+      <div class="seg small" role="group" id="district-switch" data-t-aria="nav.district"></div>
+      <div class="seg small" role="group" id="year-switch" data-t-aria="nav.year" hidden></div>
+      <div class="seg small" role="group" id="lang-switch" data-t-aria="nav.language"></div>
+    </div>
+  </div>
+</div>
+
+<div class="wrap" id="page" aria-busy="true">
+  <div class="loading" id="loading" role="status">Загрузка… / Loading…</div>
+  <p class="loaderr" id="load-error" role="alert" hidden></p>
+  <header>
+    <div class="eyebrow" id="eyebrow"></div>
+    <h1 id="title"></h1>
+    <p class="lede" id="lede"></p>
+    <p class="meta" id="meta"></p>
+  </header>
+
+  <section data-t-aria="sections.stats">
+    <div class="stats" id="stats"></div>
+  </section>
+
+  <section aria-labelledby="map-h">
+    <div class="read">
+      <h2 id="map-h" data-t="sections.map"></h2>
+      <p id="map-intro"></p>
+    </div>
+    <div class="controls">
+      <div class="seg" role="group" data-t-aria="map.modes_aria">
+        <button type="button" data-mode="crop" aria-pressed="true" data-t="map.crop"></button>
+        <button type="button" data-mode="time" aria-pressed="false" data-t="map.time"></button>
+      </div>
+      <button type="button" class="toggle" id="sat-toggle" aria-pressed="true"><span class="dot" aria-hidden="true"></span><span data-t="map.satellite"></span></button>
+    </div>
+    <div class="mapgrid">
+      <div class="mapbox">
+        <svg id="map" role="img" data-t-aria="map.aria"></svg>
+        <div class="zoom">
+          <button type="button" id="z-in" data-t-aria="map.zoom_in"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+          <button type="button" id="z-out" data-t-aria="map.zoom_out"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg></button>
+          <button type="button" id="z-reset" data-t-aria="map.reset"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+        </div>
+        <div class="scale" id="scale"></div>
+        <div class="credit" id="credit" data-t="map.imagery_credit"></div>
+      </div>
+      <div class="side">
+        <div class="card" id="key" aria-live="polite"></div>
+        <div class="card" id="panel" aria-live="polite"></div>
+      </div>
+    </div>
+    <p class="note" id="map-note"></p>
+  </section>
+
+  <section aria-labelledby="acc-h">
+    <div class="read">
+      <h2 id="acc-h" data-t="sections.accounts"></h2>
+      <p id="acc-intro"></p>
+    </div>
+    <div class="callout" id="callout" hidden><p id="callout-text"></p></div>
+    <div class="tablewrap">
+      <table id="acc">
+        <caption id="acc-caption"></caption>
+        <thead><tr></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <button type="button" class="more" id="acc-more" aria-controls="acc" hidden></button>
+    <p class="note" id="pair-note" hidden></p>
+    <p class="note" id="private-note"></p>
+  </section>
+
+  <section aria-labelledby="charts-h">
+    <div class="read">
+      <h2 id="charts-h" data-t="sections.charts"></h2>
+      <p id="charts-intro"></p>
+    </div>
+    <div class="chartgrid" id="charts"></div>
+  </section>
+
+  <section aria-labelledby="pace-h">
+    <div class="read">
+      <h2 id="pace-h" data-t="sections.pace"></h2>
+      <p id="pace-intro"></p>
+    </div>
+    <div class="chart"><svg id="pace" role="img"></svg><div class="legend" id="pace-legend"></div></div>
+  </section>
+
+  <section aria-labelledby="how-h">
+    <h2 id="how-h" data-t="sections.trust"></h2>
+    <div class="two" id="trust"></div>
+  </section>
+
+  <footer>
+    <span class="eyebrow" data-t="sections.sources"></span>
+    <ol id="sources"></ol>
+    <p id="about" data-t="footer.about"></p>
+    <p id="author" hidden></p>
+    <p data-t="footer.updated"></p>
+  </footer>
+</div>
+
+<script src="map.js"></script>
+<script src="charts.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

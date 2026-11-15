@@ -16,3 +16,8 @@ data/
 .project
 .settings/
 .factorypath
+
+# Built public site (holds company names)
+site/dist/
+
+__pycache__/

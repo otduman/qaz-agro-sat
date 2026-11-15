@@ -220,7 +220,44 @@ class FieldFinderTest {
         FieldParameters d = P;
         return new FieldParameters(d.brightnessWeight(), d.edgeRank(), d.markerEdge(), d.markerShrink(),
                 d.minMarkerPixels(), d.lineRadius(), d.lineEdge(), ridgeWeak, d.curveTolerance(),
-                d.minCommonDates(), d.minClearShare(),
+                d.minCommonDates(), d.pieceCurveTolerance(), d.pieceLineEdge(), d.pieceMaxHectares(),
+                d.pieceMaxShare(), d.minClearShare(),
+                d.minRegionHectares(), d.maxHoleHectares(), d.minLabelDates(), d.springEnd(), d.springBare(),
+                d.peakGreen(), d.peakFrom(), d.dropBy(), d.dropUntil(), d.fallowBare(), d.fallowShare(),
+                d.waterMedian(), d.uniformitySpread(), d.simplifyMetres());
+    }
+
+    @Test
+    void aCrookedWetHollowDoesNotCutAPieceOffAField() throws Exception {
+        // A 3-pixel hollow, wet all season, winds across the field near its bottom. Its edges are far above the
+        // weak-ridge limit, so the first pass leaves the strip below it apart; it is crooked, so it isn't a border.
+        SyntheticSeason season = new SyntheticSeason((x, y, d) -> {
+            double middle = 90 + 6 * Math.sin(x / 8.0);
+            return Math.abs(y - middle) <= 1.5 ? WATER : wheat(d);
+        });
+
+        FieldMap map = find(season);
+        FieldMap firstPassOnly = FieldFinder.find(season, withPieceCurveTolerance(0.0), line -> { });
+
+        assertEquals(2, regionIds(firstPassOnly).size(), "the hollow really does cut the field");
+        assertEquals(Set.of(1), regionIds(map));
+        assertEquals(label(map, 80, 10), label(map, 80, HEIGHT - 5));
+    }
+
+    @Test
+    void aStraightWetDitchKeepsTwoFieldsApart() throws Exception {
+        // The same hollow, but straight: a border, so the two sides stay apart even with the same crop.
+        FieldMap map = find(new SyntheticSeason((x, y, d) -> Math.abs(y - 90) <= 1 ? WATER : wheat(d)));
+
+        assertNotEquals(label(map, 80, 10), label(map, 80, HEIGHT - 5));
+    }
+
+    private static FieldParameters withPieceCurveTolerance(double tolerance) {
+        FieldParameters d = P;
+        return new FieldParameters(d.brightnessWeight(), d.edgeRank(), d.markerEdge(), d.markerShrink(),
+                d.minMarkerPixels(), d.lineRadius(), d.lineEdge(), d.ridgeWeak(), d.curveTolerance(),
+                d.minCommonDates(), tolerance, d.pieceLineEdge(), d.pieceMaxHectares(),
+                d.pieceMaxShare(), d.minClearShare(),
                 d.minRegionHectares(), d.maxHoleHectares(), d.minLabelDates(), d.springEnd(), d.springBare(),
                 d.peakGreen(), d.peakFrom(), d.dropBy(), d.dropUntil(), d.fallowBare(), d.fallowShare(),
                 d.waterMedian(), d.uniformitySpread(), d.simplifyMetres());

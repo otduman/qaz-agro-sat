@@ -2,7 +2,7 @@
 it in QazTRF-23 / Gauss-Kruger zone 12 (east, north, as the public cadastral map shows), the cut status from the
 harvest step, the running share of field area, and blank columns for the plot card. Writes
 <square>/owners-<year>.csv. Run from the repository root:
-python data/tayynsha/tools/owner_sheet_square.py E560N5960 2026
+python data/tayynsha/tools/owner_sheet_square.py E560N5960 2026 [DISTRICT_DIR, default data/tayynsha]
 """
 import csv
 import math
@@ -11,7 +11,7 @@ import sys
 import numpy as np
 import tifffile
 
-BASE = 'C:/Programming Projects/qaz-agro-sat/data/tayynsha/'
+BASE = (sys.argv[3].rstrip('/') + '/') if len(sys.argv) > 3 else 'C:/Programming Projects/qaz-agro-sat/data/tayynsha/'
 square, year = sys.argv[1], sys.argv[2]
 SQ = BASE + square + '/'
 props = dict(l.strip().split('=', 1) for l in open(SQ + f'season-{year}/' + 'stack.properties', encoding='utf-8') if '=' in l)
