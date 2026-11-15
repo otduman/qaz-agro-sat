@@ -22,7 +22,13 @@ TWO_SEASONS = ['E500N5960', 'E500N5980', 'E520N5960', 'E540N5960', 'E560N5940', 
 
 
 def district_of(square):
-    return 'sandyktau' if square in SANDYKTAU else 'tayynsha'
+    """The district folder holding the square (the first three Sandyktau squares by name, as before)."""
+    if square in SANDYKTAU:
+        return 'sandyktau'
+    for d in ('tayynsha', 'sandyktau', 'esil-akmola'):
+        if os.path.isdir(DATA + d + '/' + square):
+            return d
+    return 'tayynsha'
 
 
 def square_dir(square):

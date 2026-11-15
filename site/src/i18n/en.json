@@ -108,7 +108,9 @@
     "group_mark": "group",
     "show_all": "Show all ({n})",
     "show_fewer": "Show fewer",
-    "pair_note": "Rows with two names are two registered companies with one name: the older farm and the group's newer partnership. Their fields are mixed together or both belong to the group, so their area is shown together."
+    "pair_note": "Some farms are registered as two companies with one name, an older and a newer one; their land is shown under the newer name, with the older one noted below it.",
+    "members": "{n} companies",
+    "same_farm": "same farm as {names}"
   },
   "charts": {
     "companies_title": "Largest companies by field area",
@@ -130,6 +132,7 @@
     "pace_all": "All fields",
     "pace_group": "Grain group",
     "pace_other": "Others",
+    "pace_unknown": "No cut date found",
     "rain": "rain",
     "pace_official": "official",
     "companies_note_plain": "Area inside the surveyed squares, thousand ha."

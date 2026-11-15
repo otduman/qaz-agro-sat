@@ -38,7 +38,20 @@ def test_pairs_join_two_registrations_of_one_farm():
     merged, labels = district_data.join_pairs(rows, pairs)
     assert merged == [('ТОО "Новое GCK"', 'company', 'grain', 100.0), ('ТОО "Новое GCK"', 'company', 'oilseed', 50.0),
                       ('ТОО "Другое"', 'company', 'grain', 30.0)]
-    assert labels == {'ТОО "Новое GCK"': 'ТОО «Новое GCK» + «Старое»'}
+    assert labels == {'ТОО "Новое GCK"': ['ТОО «Старое»']}      # one name per farm; the other registration noted
+
+
+def test_group_members_fold_into_one_row_with_a_list():
+    acc = [dict(name='ТОО «Альфа»', group=True, ha=300, grain=200, oil=100, avg=1.0, modern=[1.0, 2.0], whole=None, src=None, url=None, also=[]),
+           dict(name='ТОО «Бета»', group=False, ha=250, grain=250, oil=0, avg=2.0, modern=[2.0, 3.0], whole=None, src=None, url=None, also=[]),
+           dict(name='ТОО «Группа»', group=True, ha=100, grain=60, oil=40, avg=0.5, modern=[0.5, 0.5], whole='90 000 га', src='S', url='u', also=[])]
+    out = district_data.group_accounts(acc, 'Группа')
+    assert [a['name'] for a in out] == ['Группа', 'ТОО «Бета»']
+    g = out[0]
+    assert g['members_n'] == 2 and g['ha'] == 400 and g['grain'] == 260 and g['oil'] == 140 and g['avg'] == 1.5
+    assert g['modern'] == [1.5, 2.5] and g['whole'] == '90 000 га' and g['url'] == 'u'
+    assert [m['name'] for m in g['members']] == ['ТОО «Альфа»', 'ТОО «Группа»']
+    assert g['members'][1]['whole'] is None         # the group's own figure moves up to the group row
 
 
 def test_a_paired_registration_joins_its_partners_group():
@@ -84,6 +97,8 @@ def test_fallow_regions_are_taken_once_from_the_square_whose_core_holds_them():
     out = district_data.land_regions(d, '2026', geo.projector(lat0, lon0), 'fallow')
     assert [r['ha'] for r in out] == [50]
     assert len(out[0]['p']) >= 6
+    # a square still being processed (not in the district table yet) gives no fallow
+    assert district_data.land_regions(d, '2026', geo.projector(lat0, lon0), 'fallow', only={'E520N5900'}) == []
 
 
 def test_an_island_is_the_region_almost_all_of_whose_border_touches_one_bigger_region():
@@ -199,7 +214,7 @@ def test_tayynsha_build_privacy():
         return
     d = district_data.build('data/tayynsha', '2026', 'data/tayynsha/holders.csv', 'data/tayynsha/company-groups.csv',
                             'docs/districts/tayynsha.geojson', (69.764, 53.848), 701)
-    assert len(d["fields"]) == 2792, len(d["fields"])  # small fields joined, hybrid outlines, straight borders, holders via shared borders, readability joins, duplicates dropped, joins v3, islands folded
+    assert len(d["fields"]) == 2775, len(d["fields"])  # gaps filled, tails trimmed, small fields joined, hybrid outlines, straight borders, holders via shared borders, readability joins, duplicates dropped, joins v3, islands folded
     assert all(f['h'] is None for f in d['fields'] if f['k'] in ('farm', 'private', 'lease', 'college'))
     assert d['totals']['group_ha'] > 0
     # 'known holder' leaves out land whose holder the map hides: group share as published (about 42%)

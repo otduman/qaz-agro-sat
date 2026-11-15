@@ -13,8 +13,10 @@ the 2024–2026 seasons.
    21 × 21 km square at a time, plus Landsat for extra clear dates.
 2. **Finds fields.** Groups pixels whose greenness curves through the season move together, then cleans the result:
    land labels (field, fallow, other), a water guard, straight borders, and joins of pieces that belong to one field.
-3. **Dates the harvest.** A field's cut shows as a jump in short-wave infrared between two clear photos; the cut date
-   is the middle of that window.
+3. **Dates the harvest.** After a field ripens, its cut is the first sharp change in its colour between two clear
+   photos (short-wave infrared, brightness, residue, stubble lines; brighter or darker alike). Changes the whole area
+   makes on one day (haze, light) are removed first. The cut date is the middle of that window; a cut hidden by a
+   long cloudy spell gets the whole spell.
 4. **Sorts crops into groups.** Short-season (spring wheat, barley), long-season (flax, sunflower), yellow-flowering
    (rapeseed), by when each field turns green, flowers and ripens.
 5. **Builds the site.** One page per district and season: the field map over a summer photo, crop groups, harvest
@@ -85,7 +87,8 @@ Checked against a hand-marked sample of 101 fields from the three districts (202
 - every sampled area drawn as a field was farmland;
 - before the latest joins, 51 of 87 decided fields (about two thirds of their area) had the right outline; most
   errors were small pieces of a larger field, which the small-field joins now merge;
-- harvest dates rely on clear photos, so fields cut during long cloudy spells stay undated.
+- harvest dates rely on clear photos; in Tayynsha 2026 about 84% of the grain area gets a date, and the share cut by
+  7 September (68%) sits a little under the official 72%. A single field's date can be a week or more off.
 
 Every change to the field rules is checked the same way: the rule is written down first, then compared blind against
 the photos at random points, and kept only if it wins at least two times in three.

@@ -235,12 +235,15 @@ def move_holders(owner, kept):
     return out
 
 
-def land_regions(district_dir, year, proj, land, skip=frozenset()):
+def land_regions(district_dir, year, proj, land, skip=frozenset(), only=None):
     """Regions of one land label (e.g. 'fallow') as [{p, ha}], each taken once: from the square whose core (its box
-    less the 0.5 km overlap on every side) holds the region's centre."""
+    less the 0.5 km overlap on every side) holds the region's centre. only: the squares in the district table (a square
+    still being processed is left out)."""
     out = []
     for r in csv.DictReader(open(f'{district_dir}/squares.csv', encoding='utf-8')):
         sq = r['square']
+        if only is not None and sq not in only:
+            continue
         table = f'{district_dir}/{sq}/series-{year}/fields-{year}.csv'
         shapes = f'{district_dir}/{sq}/fields-{year}/fields-{year}.geojson'
         if not (os.path.isfile(table) and os.path.isfile(shapes)):
@@ -284,8 +287,8 @@ def pairs_of(district_dir):
 
 
 def join_pairs(rows, pairs):
-    """rows (holder, type, crop, ha) with each paired holder replaced by its partner, and the joint names:
-    partner -> 'ТОО «Partner» + «Paired»' for partners that took rows over."""
+    """rows (holder, type, crop, ha) with each paired holder replaced by its partner, and per partner the names of the
+    other registrations it took over: partner -> ['ТОО «Paired»']. The farm keeps one name, the partner's."""
     merged, joined = [], defaultdict(list)
     for h, t, c, ha in rows:
         to = pairs.get(h)
@@ -294,15 +297,30 @@ def join_pairs(rows, pairs):
                 joined[to].append(h)
             h = to
         merged.append((h, t, c, ha))
-    labels = {}
-    for to, olds in joined.items():
-        label = name(to, 'company')
-        form = to.partition(' ')[0]
-        for h in olds:
-            n = name(h, 'company')
-            label += ' + ' + (n[len(form) + 1:] if h.partition(' ')[0] == form else n)
-        labels[to] = label
-    return merged, labels
+    return merged, {to: [name(h, 'company') for h in olds] for to, olds in joined.items()}
+
+
+def group_accounts(accounts, group_name):
+    """The group's member rows folded into one row named group_name, placed by size among the others. The group row
+    sums area and combines and lists its members (largest first); a member whose name holds the group's own name gives
+    the group row its whole-farm figure."""
+    members = [a for a in accounts if a['group']]
+    others = [a for a in accounts if not a['group']]
+    if not members:
+        return accounts
+    members = sorted(members, key=lambda a: -a['ha'])
+    key = group_name.lower()
+    own = next((m for m in members if key in m['name'].lower()), None)
+    g = dict(name=group_name, group=True, group_row=True, members_n=len(members), also=[],
+             ha=sum(m['ha'] for m in members), grain=sum(m['grain'] for m in members), oil=sum(m['oil'] for m in members),
+             avg=round(sum(m['avg'] for m in members), 1) if all(m['avg'] is not None for m in members) else None,
+             modern=[round(sum(m['modern'][0] for m in members), 1), round(sum(m['modern'][1] for m in members), 1)],
+             whole=own['whole'] if own else None, src=own['src'] if own else None, url=own['url'] if own else None)
+    if own:
+        own = dict(own, whole=None, src=None, url=None)
+        members = [own if m['name'] == own['name'] else m for m in members]
+    g['members'] = members
+    return sorted([g] + others, key=lambda a: -a['ha'])
 
 
 def group_with_pairs(in_group, pairs):
@@ -411,21 +429,24 @@ def build(district_dir, year, holders_csv, groups_csv, boundary_geojson, town_lo
             rows.append((h, types.get(h, ''), crops.get((r['square'], r['field']), 'unclear'), float(r['area_ha'])))
     public = public_figures(district_dir)
     present = {r[0] for r in rows}
-    rows, joint = join_pairs(rows, pairs)
+    rows, also = join_pairs(rows, pairs)
     accounts = []
     for a in market.summarise(rows):
         if a['type'] not in NAMED:
             continue
         combine_ha = a['grain_ha'] + a['oilseed_ha']
         pub = public.get(a['holder']) or next((public[h] for h, to in pairs.items() if to == a['holder'] and h in public), {})
-        n = 1 + sum(1 for h, to in pairs.items() if to == a['holder'] and h in present)
-        accounts.append(dict(name=joint.get(a['holder']) or name(a['holder'], a['type']), pair=a['holder'] in joint, n=n,
+        accounts.append(dict(name=name(a['holder'], a['type']), also=also.get(a['holder'], []),
                              group=a['holder'] in in_group, ha=a['field_ha'],
                              grain=a['grain_ha'], oil=a['oilseed_ha'],
                              avg=round(combine_ha / ha_per_combine, 1) if ha_per_combine else None,
                              modern=[round(combine_ha / 2000, 1), round(combine_ha / 1600, 1)],
                              whole=pub.get('whole_farm') or None, src=pub.get('source') or None,
                              url=pub.get('url') or None))
+
+    group_names = sorted({r['group'] for r in csv.DictReader(open(groups_csv, encoding='utf-8')) if r.get('group')})
+    if len(group_names) == 1:
+        accounts = group_accounts(accounts, group_names[0])
 
     grain_rows = [(r['cut_middle'], float(r['area_ha']), owner.get((r['square'], r['field'])) in in_group)
                   for r in table if crops.get((r['square'], r['field'])) in GRAIN]
@@ -438,7 +459,7 @@ def build(district_dir, year, holders_csv, groups_csv, boundary_geojson, town_lo
         s['ha'] += f['ha']
 
     return dict(
-        year=str(year), fields=fields, fallow=land_regions(district_dir, year, proj, 'fallow', dark), squares=squares, outline=outline, plots=plot_outlines(plots, proj), town=list(proj(*town_lonlat)), origin=[lat0, lon0],
+        year=str(year), fields=fields, fallow=land_regions(district_dir, year, proj, 'fallow', dark, only=set(want)), squares=squares, outline=outline, plots=plot_outlines(plots, proj), town=list(proj(*town_lonlat)), origin=[lat0, lon0],
         accounts=accounts, pace=pace(grain_rows, year),
         crop_ha={c: round(crop_ha.get(c, 0)) for c in ('grain', 'oilseed', 'other', 'none')}, sizes=sizes,
         totals=dict(fields=len(fields), ha=round(sum(x['ha'] for x in fields)),

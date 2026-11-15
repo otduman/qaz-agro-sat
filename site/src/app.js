@@ -110,17 +110,44 @@
 
   const TOP = 25;
   let showAll = false;
+  const openGroups = new Set();
+  function accRow(a, T, hasAvg, cls) {
+    const also = (a.also || []).length ? `<span class="also">${esc(T.same_farm.replace('{names}', a.also.join(', ')))}</span>` : '';
+    let label;
+    if (a.group_row) {
+      const open = openGroups.has(a.name);
+      label = `<button type="button" class="grp" aria-expanded="${open}" data-g="${esc(a.name)}"><span class="tw" aria-hidden="true">${open ? '▾' : '▸'}</span>${esc(a.name)}</button>`
+        + `<span class="chip">${esc(T.members.replace('{n}', fmt(a.members_n)))}</span>`;
+    } else {
+      label = esc(a.name);
+    }
+    return `<tr class="${cls}">
+      <td>${label}${also}</td>
+      <td class="n">${fmt(a.ha)}</td><td class="n">${fmt(a.grain)}</td><td class="n">${fmt(a.oil)}</td>
+      ${hasAvg ? `<td class="n">${n1(a.avg)}</td>` : ''}<td class="n">${n1(a.modern[0])}–${n1(a.modern[1])}</td>
+      <td>${a.whole ? `${esc(a.whole)}${a.url ? `<a class="src" href="${esc(a.url)}" rel="noopener">${esc(a.src || a.url)}</a>` : ''}` : '<span style="color:var(--muted)">—</span>'}</td></tr>`;
+  }
   function table() {
     const T = ui.table, hasAvg = D.accounts.some(a => a.avg != null);
     const rows = D.accounts.filter(a => a.ha >= 150), shown = showAll ? rows : rows.slice(0, TOP);
     $('acc').querySelector('thead tr').innerHTML = `<th>${esc(T.company)}</th><th class="n">${esc(T.fields_ha)}</th><th class="n">${esc(T.grain)}</th><th class="n">${esc(T.oilseed)}</th>`
       + (hasAvg ? `<th class="n">${esc(T.avg)}</th>` : '') + `<th class="n">${esc(T.modern)}</th><th>${esc(T.whole)}</th>`;
-    $('acc').querySelector('tbody').innerHTML = shown.map(a => `<tr>
-      <td>${esc(a.name)}${a.group ? `<span class="chip">${esc(ui.kinds.group_chip)}</span>` : ''}</td>
-      <td class="n">${fmt(a.ha)}</td><td class="n">${fmt(a.grain)}</td><td class="n">${fmt(a.oil)}</td>
-      ${hasAvg ? `<td class="n">${n1(a.avg)}</td>` : ''}<td class="n">${n1(a.modern[0])}–${n1(a.modern[1])}</td>
-      <td>${a.whole ? `${esc(a.whole)}${a.url ? `<a class="src" href="${esc(a.url)}" rel="noopener">${esc(a.src || a.url)}</a>` : ''}` : '<span style="color:var(--muted)">—</span>'}</td></tr>`).join('');
-    $('pair-note').hidden = !D.accounts.some(a => a.pair);
+    $('acc').querySelector('tbody').innerHTML = shown.map(a => {
+      let html = accRow(a, T, hasAvg, a.group_row ? 'grouprow' : '');
+      if (a.group_row && openGroups.has(a.name)) html += a.members.map(m => accRow(m, T, hasAvg, 'member')).join('');
+      return html;
+    }).join('');
+    for (const btn of $('acc').querySelectorAll('button.grp')) {
+      btn.addEventListener('click', () => {
+        const g = btn.dataset.g;
+        if (openGroups.has(g)) openGroups.delete(g); else openGroups.add(g);
+        table();
+        const again = [...$('acc').querySelectorAll('button.grp')].find(x => x.dataset.g === g);
+        if (again) again.focus();
+      });
+    }
+    const anyAlso = D.accounts.some(a => (a.also || []).length || (a.members || []).some(m => (m.also || []).length));
+    $('pair-note').hidden = !anyAlso;
     $('pair-note').textContent = T.pair_note;
     const more = $('acc-more');
     more.hidden = rows.length <= TOP;

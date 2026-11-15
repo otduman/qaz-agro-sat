@@ -33,7 +33,8 @@ const Charts = (() => {
   function companies(D, ui, F) {
     const svg = document.getElementById('ch-companies');
     const W = widthOf(svg), max = W < NARROW ? 40 : 34;
-    const rows = D.accounts.slice(0, 15).map(a => ({
+    const flat = D.accounts.flatMap(a => a.group_row ? a.members : [a]).sort((x, y) => y.ha - x.ha);  // companies one by one
+    const rows = flat.slice(0, 15).map(a => ({
       v: a.ha, col: a.group ? 'var(--group)' : 'var(--muted)',
       label: a.name.length > max ? a.name.slice(0, max - 1) + '…' : a.name,
       title: `${a.name}: ${F.int(a.ha)} ${ui.map.ha}`
@@ -103,6 +104,11 @@ const Charts = (() => {
       h += `<path d="${s.map(([d, v], i) => (i ? 'L' : 'M') + X(d).toFixed(1) + ' ' + Y(v).toFixed(1)).join('')}" fill="none" stroke="${col}" stroke-width="${sw}" stroke-linejoin="round"><title>${esc(lab)} ${Math.round(end[1] * 100)}%</title></path>`;
       ends.push({ y: Y(end[1]), x: X(end[0]), col, lab, pct: Math.round(end[1] * 100) });
     });
+    // Grain area with no cut date found: the gap between the 'all' line's end and 100%, as a bar at the right end.
+    const allEnd = ends[0], unknown = 1 - D.pace.all[D.pace.all.length - 1][1];
+    if (unknown > 0.005) {
+      h += `<rect x="${allEnd.x - 7}" y="${Y(1)}" width="7" height="${allEnd.y - Y(1)}" fill="url(#pace-unknown)" stroke="var(--muted)" stroke-width="1"><title>${esc(ui.charts.pace_unknown)} ${Math.round(unknown * 100)}%</title></rect>`;
+    }
     if (!narrow && series.length > 1) {
       // Direct labels at the line ends, nudged apart so they do not collide.
       const lab = ends.slice().sort((a, b) => a.y - b.y);
@@ -115,9 +121,11 @@ const Charts = (() => {
       h += `<circle cx="${X(p.date)}" cy="${Y(p.share)}" r="5" fill="var(--ink)" stroke="var(--surface)" stroke-width="2"><title>${esc(text)}</title></circle>`
         + `<text class="lab" x="${X(p.date) + 10}" y="${Y(p.share) - 8}">${esc(text)}</text>`;
     }
+    h = `<defs><pattern id="pace-unknown" patternUnits="userSpaceOnUse" width="5" height="5" patternTransform="rotate(45)"><rect width="5" height="5" fill="var(--surface)"/><line x1="0" y1="0" x2="0" y2="5" stroke="var(--muted)" stroke-width="2"/></pattern></defs>` + h;
     put(svg, W, H, h);
     svg.setAttribute('aria-label', ui.charts.pace_aria);
     const items = series.length > 1 || narrow ? ends.map(e => [e.col, `${e.lab} ${e.pct}%`]) : [];
+    if (unknown > 0.005) items.push(['repeating-linear-gradient(45deg, var(--muted) 0 2px, transparent 2px 5px)', `${ui.charts.pace_unknown} ${Math.round(unknown * 100)}%`, 1]);
     document.getElementById('pace-legend').innerHTML = legendHTML(items);
   }
 
