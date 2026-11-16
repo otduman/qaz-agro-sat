@@ -96,6 +96,16 @@ section { display: grid; gap: 18px; min-width: 0; }
 .mapgrid { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; align-items: start; }
 @media (max-width: 900px) { .mapgrid { grid-template-columns: minmax(0, 1fr); } }
 .side { display: grid; gap: 16px; min-width: 0; }
+.mapcol { display: grid; gap: 10px; min-width: 0; }
+/* the season slider under the map: oldest season left (owner 2026-11-16) */
+.seasons { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 6px 14px; padding: 10px 14px 6px; border: 1px solid var(--rule); border-radius: 10px; background: var(--surface); }
+.seasons[hidden] { display: none; }
+.seasons .lab { font: 600 12px/1.4 var(--font-body); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.seasons .track { display: grid; gap: 2px; min-width: 0; }
+.seasons input[type="range"] { width: 100%; margin: 0; accent-color: var(--accent); cursor: pointer; }
+.seasons .ticks { display: flex; justify-content: space-between; }
+.seasons .ticks button { font: 500 14px/1 var(--font-body); font-variant-numeric: tabular-nums; padding: 6px 4px; border: 0; background: transparent; color: var(--muted); cursor: pointer; }
+.seasons .ticks button[aria-pressed="true"] { color: var(--ink); font-weight: 600; }
 .mapbox { position: relative; background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; overflow: hidden; touch-action: none; }
 .mapbox svg { display: block; width: 100%; height: auto; aspect-ratio: 3 / 2; cursor: grab; user-select: none; }
 @media (max-width: 600px) { .mapbox svg { aspect-ratio: 1 / 1; } }

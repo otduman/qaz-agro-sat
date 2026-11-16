@@ -98,6 +98,31 @@ def test_the_season_switch_loads_the_other_season_and_keeps_it_in_the_link(page,
         assert page.is_hidden('#year-switch') or len(esil) > 1
 
 
+def test_the_season_slider_sits_under_the_map_oldest_first_and_moves_the_season(page, base):
+    # owner 2026-11-16: seasons as a slider at the bottom of the map
+    cfg = __import__('json').load(open(os.path.join(DIST, 'config.json'), encoding='utf-8'))
+    years = sorted((cfg.get('years') or {}).get('esil', []))
+    if len(years) < 2:
+        print('  skipped: one season only')
+        return
+    page.goto(base + '#en/esil')
+    settled(page)
+    box = page.locator('.mapbox').bounding_box()
+    bar = page.locator('#year-switch').bounding_box()
+    assert bar and bar['y'] >= box['y'] + box['height'] - 2, 'the season slider is under the map'
+    labels = [b.get_attribute('data-y') for b in page.locator('#year-switch [data-y]').all()]
+    assert labels == years, labels
+    slider = page.locator('#year-range')
+    assert slider.get_attribute('max') == str(len(years) - 1)
+    assert slider.input_value() == str(years.index(cfg['year']))
+    slider.focus()
+    page.keyboard.press('Home')
+    page.wait_for_function(f"location.hash === '#en/esil/{years[0]}'", timeout=20000)
+    settled(page)
+    assert years[0] in page.inner_text('#eyebrow')
+    assert page.get_attribute(f'[data-y="{years[0]}"]', 'aria-pressed') == 'true'
+
+
 if __name__ == '__main__':
     try:
         from playwright.sync_api import sync_playwright

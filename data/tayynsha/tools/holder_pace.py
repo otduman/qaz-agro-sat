@@ -19,6 +19,7 @@ Writes <district>/holder-pace.csv and <district>/holder-pace.md. Names stay in d
 import csv
 import datetime as dt
 import math
+import os
 import sys
 from collections import defaultdict
 
@@ -61,6 +62,8 @@ def owners(district, ref_year, holders, year):
                 if s == sq:
                     owner[(sq, f)] = h
             continue
+        if not os.path.isfile(f'{district}/{sq}/fields-{year}/fields-{year}.tif'):
+            continue                      # a square with no map for this season (added for later seasons only)
         ref = tifffile.imread(f'{district}/{sq}/fields-{ref_year}/fields-{ref_year}.tif').astype(np.int64)
         cur = tifffile.imread(f'{district}/{sq}/fields-{year}/fields-{year}.tif').astype(np.int64)
         hid = {}

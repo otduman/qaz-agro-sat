@@ -49,6 +49,7 @@ import kz.kazagrosat.pipeline.landsat.LandsatFolder;
 import kz.kazagrosat.pipeline.landsat.LandsatReport;
 import kz.kazagrosat.pipeline.stack.ContactSheet;
 import kz.kazagrosat.pipeline.stack.SeasonStack;
+import kz.kazagrosat.pipeline.stac.SeasonScenes;
 import kz.kazagrosat.pipeline.stack.SeasonStackBuilder;
 import kz.kazagrosat.pipeline.stack.StackEntry;
 import kz.kazagrosat.pipeline.stack.StackReport;
@@ -66,9 +67,12 @@ public final class Main {
               ndvi --bbox W,S,E,N --date YYYY-MM-DD --out FOLDER
                   Writes a cloud-masked NDVI map as a PNG and a GeoTIFF.
 
-              season --bbox W,S,E,N --year YYYY --out FOLDER
+              season --bbox W,S,E,N --year YYYY --out FOLDER [--min-share SHARE] [--tile TILE]
                   Downloads every usable date from May to October into FOLDER, with an
                   index and a contact sheet. Run it again to finish an interrupted download.
+                  On a date when no photo sees the whole area, a photo seeing at least
+                  SHARE of it is kept (default 0.5). --tile takes the photos of that
+                  Sentinel-2 tile (such as T42UUC) instead of the one covering most dates.
 
               fields --stack FOLDER --out FOLDER
                   Finds the season's fields from a stack made by the season command and
@@ -184,11 +188,17 @@ public final class Main {
                 yield (out, err) -> scenes(search, stacUri, out);
             }
             case "season" -> {
-                allowOnly(options, Set.of("--bbox", "--year", "--out", STAC_URL));
+                allowOnly(options, Set.of("--bbox", "--year", "--out", "--min-share", "--tile", STAC_URL));
                 BoundingBox bbox = BoundingBox.parse(require(options, "--bbox"));
                 int year = parseYear(require(options, "--year"));
                 Path folder = Path.of(require(options, "--out"));
-                yield (out, err) -> season(bbox, year, folder, stacUri, out, err);
+                double minShare = options.containsKey("--min-share")
+                        ? parseShare(options.get("--min-share")) : SeasonScenes.MOST;
+                String tile = options.get("--tile");
+                if (tile != null && !tile.matches("T[0-9]{2}[A-Z]{3}")) {
+                    throw new IllegalArgumentException("--tile must be a Sentinel-2 tile such as T42UUC; got " + tile);
+                }
+                yield (out, err) -> season(bbox, year, folder, minShare, tile, stacUri, out, err);
             }
             case "fields" -> {
                 allowOnly(options, Set.of("--stack", "--out"));
@@ -361,11 +371,27 @@ public final class Main {
         return 0;
     }
 
+    /** The share of the area a scene must see to be kept on a date with no whole cover (season --min-share). */
+    static double parseShare(String text) {
+        double share;
+        try {
+            share = Double.parseDouble(text);
+        } catch (NumberFormatException e) {
+            share = Double.NaN;
+        }
+        if (!(share >= SeasonScenes.MIN_PART && share <= 1)) {
+            throw new IllegalArgumentException("--min-share must be a share of the area from 0.1 to 1, such as 0.33;"
+                    + " got " + text);
+        }
+        return share;
+    }
+
     private static int season(
-            BoundingBox bbox, int year, Path folder, URI stacUri, PrintStream out, PrintStream err)
+            BoundingBox bbox, int year, Path folder, double minShare, String tile, URI stacUri, PrintStream out,
+            PrintStream err)
             throws IOException, InterruptedException {
         StackReport report = new SeasonStackBuilder(stacUri, RetryPolicy.DEFAULT, DOWNLOAD_THREADS, err::println)
-                .build(bbox, year, folder);
+                .build(bbox, year, folder, minShare, tile);
         SeasonStack stack = SeasonStack.open(folder);
         Path sheet = folder.resolve("contact-sheet.png");
         boolean sheetFailed = false;

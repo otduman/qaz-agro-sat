@@ -16,7 +16,6 @@
     <a class="brand" id="brand" href="#">QazAgroSat <span class="sub">Атлас полей</span></a>
     <div class="switches">
       <div class="seg small" role="group" id="district-switch" data-t-aria="nav.district"></div>
-      <div class="seg small" role="group" id="year-switch" data-t-aria="nav.year" hidden></div>
       <div class="seg small" role="group" id="lang-switch" data-t-aria="nav.language"></div>
     </div>
   </div>
@@ -49,6 +48,7 @@
       <button type="button" class="toggle" id="sat-toggle" aria-pressed="true"><span class="dot" aria-hidden="true"></span><span data-t="map.satellite"></span></button>
     </div>
     <div class="mapgrid">
+      <div class="mapcol">
       <div class="mapbox">
         <svg id="map" role="img" data-t-aria="map.aria"></svg>
         <div class="zoom">
@@ -58,6 +58,8 @@
         </div>
         <div class="scale" id="scale"></div>
         <div class="credit" id="credit" data-t="map.imagery_credit"></div>
+      </div>
+      <div class="seasons" role="group" id="year-switch" data-t-aria="nav.year" hidden></div>
       </div>
       <div class="side">
         <div class="card" id="key" aria-live="polite"></div>

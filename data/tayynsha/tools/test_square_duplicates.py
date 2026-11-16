@@ -31,6 +31,22 @@ def test_only_counted_regions_are_compared():
     assert sd.pair_duplicates(a, b, dy=0, dx=0, a_ids=set(), b_ids={1}) == set()
 
 
+def test_a_square_on_another_grid_is_resampled_onto_this_one():
+    # Esil (2026-11-16): neighbouring squares on tiles of different UTM zones (or grids not 10 m apart) were never
+    # compared, so fields where they overlap were drawn twice.
+    import geo
+    xa, ya = 300000.0, 5800000.0                     # A: zone 42, top-left corner, 10 m pixels, 40 x 40
+    lon, lat = geo.from_utm42(xa, ya)
+    xb, yb = geo.utm42(lon, lat, 63.0)               # the same corner in zone 41
+    b = np.zeros((60, 60), np.int64)
+    b[0:20, 0:20] = 7                                # B covers the north-west of A
+    on_a = sd.onto(b, xb - 100, yb + 100, 32641, (40, 40), xa, ya, 32642)
+    assert on_a.shape == (40, 40)
+    assert on_a[3, 3] == 7                           # 30 m into A is 130 m into B: inside the block
+    assert on_a[35, 35] == 0                         # far from the block (B's label 0 there)
+    assert sd.onto(b, xb + 5000, yb, 32641, (40, 40), xa, ya, 32642)[5, 5] == 0   # B wholly east of A: nothing
+
+
 if __name__ == '__main__':
     tests = [v for k, v in sorted(globals().items()) if k.startswith('test_')]
     for t in tests:

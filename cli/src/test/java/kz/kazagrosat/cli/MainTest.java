@@ -177,8 +177,22 @@ class MainTest {
             "scenes --bbox 62,53,63,54 --from 2025-07-01",                // no end date
             "scenes --bbox 62,53,63,54 --from 2025-07-31 --to 2025-07-01",    // dates reversed
             "scenes --bbox 62,53,63,54 --from 2025-07-01 --to 2025-07-31 --max-cloud lots",
+            "season --bbox 62,53,63,54 --year 2025 --out x --min-share 0.05",     // under a tenth of the area
+            "season --bbox 62,53,63,54 --year 2025 --out x --min-share 1.5",      // over the whole area
+            "season --bbox 62,53,63,54 --year 2025 --out x --min-share half",
+            "season --bbox 62,53,63,54 --year 2025 --out x --tile 42UUC",           // a tile is T + 5 characters
     })
     void invalidCommandsAreUsageErrors(String commandLine) {
+        if (commandLine.contains("--tile")) {
+            assertEquals(2, run(commandLine.split(" ")), stderr());
+            assertTrue(stderr().contains("--tile must be a Sentinel-2 tile such as T42UUC"), stderr());
+            return;
+        }
+        if (commandLine.contains("--min-share")) {
+            assertEquals(2, run(commandLine.split(" ")), stderr());
+            assertTrue(stderr().contains("--min-share must be a share of the area from 0.1 to 1"), stderr());
+            return;
+        }
         assertEquals(2, run(commandLine.split(" ")), stderr());
 
         assertFalse(stderr().isBlank());

@@ -1,7 +1,7 @@
 /* Field Atlas map: fields on a flat kilometre grid (SVG viewBox), a Sentinel-2 picture underneath, pan and zoom. */
 const FieldMap = (() => {
   const NS = 'http://www.w3.org/2000/svg';
-  const DETAIL_BELOW_KM = 40;
+  const DETAIL_BELOW_KM = 70;
   let svg, scaleEl, onPick, D = null, ui = null, vb = null, ext = null;
   let els = [], gImg, gTiles, gF, townDot, townLabel, loaded = new Set();
   let state = { mode: 'crop', sat: true, sel: null };

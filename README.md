@@ -13,6 +13,8 @@ the 2024–2026 seasons.
    21 × 21 km square at a time, plus Landsat for extra clear dates.
 2. **Finds fields.** Groups pixels whose greenness curves through the season move together, then cleans the result:
    land labels (field, fallow, other), a water guard, straight borders, and joins of pieces that belong to one field.
+   On the site a field must show a crop during the season and be at least 50 ha (smaller ones that no neighbour
+   absorbs are left off; under 1% of the area).
 3. **Dates the harvest.** After a field ripens, its cut is the first sharp change in its colour between two clear
    photos (short-wave infrared, brightness, residue, stubble lines; brighter or darker alike). Changes the whole area
    makes on one day (haze, light) are removed first. The cut date is the middle of that window; a cut hidden by a

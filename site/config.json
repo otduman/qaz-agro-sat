@@ -56,7 +56,7 @@
       "plots": [
         "data/esil-akmola/zarechny-plot-027006.geojson"
       ],
-      "holders_read": false,
+      "holders_read": true,
       "years": [
         "2026",
         "2025",

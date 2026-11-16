@@ -117,6 +117,32 @@ def inherit_from_parents(owner, parents, keys, year):
     return out
 
 
+MIN_FIELD_HA = 50   # owner 2026-11-15: "be stricter towards what counts as a field, cut the number a bit"
+
+
+def idle_fallow(district_dir, year):
+    """(square, region) of fallow that was fallow the other season too (data/tayynsha/tools/fallow_both_years.py):
+    idle land, not shown as fallow; and fallow green or damp in spring, which is steppe (fallow_steppe.py, Esil)."""
+    out = set()
+    for name in ('fallow-both', 'fallow-steppe'):
+        p = f'{district_dir}/{name}-{year}.csv'
+        if os.path.isfile(p):
+            out |= {(r['square'], r['region']) for r in csv.DictReader(open(p, encoding='utf-8'))}
+    return out
+
+
+def strict_fields(fields, fallow, min_ha=MIN_FIELD_HA):
+    """(fields, fallow) after the stricter rule: a field where no crop was seen all season is shown as fallow; a field
+    under min_ha that no neighbour absorbed is left off (under 1% of the area)."""
+    kept, fal = [], list(fallow)
+    for f in fields:
+        if f.get('c') == 'none':
+            fal.append(dict(p=f['p'], ha=f['ha']))
+        elif f['ha'] >= min_ha:
+            kept.append(f)
+    return kept, fal
+
+
 def fold_islands(keyed, parents, year, alias=None):
     """keyed: [((square, field id), field dict)]. An island whose surrounding region is a field in the list is not
     shown on its own: its hectares join that field (the field's outline already covers it). alias: a joined piece's
@@ -355,6 +381,7 @@ def build(district_dir, year, holders_csv, groups_csv, boundary_geojson, town_lo
     in_group = group_with_pairs({r['holder'] for r in csv.DictReader(open(groups_csv, encoding='utf-8'))}, pairs)
     dark = dark_regions(district_dir, year,
                         [r['square'] for r in csv.DictReader(open(f'{district_dir}/squares.csv', encoding='utf-8'))])
+    dark = set(dark) | idle_fallow(district_dir, year)
     twice, kept = duplicates_of(district_dir, year)
     land_table = [r for r in csv.DictReader(open(f'{district_dir}/district-harvest-{year}.csv', encoding='utf-8'))
                   if r['land'] == 'field' and (r['square'], r['field']) not in dark]
@@ -411,8 +438,16 @@ def build(district_dir, year, holders_csv, groups_csv, boundary_geojson, town_lo
                            h=name(h, types.get(h, '')) if h else None, k=kind_of(h) if h else None,
                            r=1 if r['square'] in read else 0)))
     # islands (a region almost wholly inside a field) are shown as part of that field
+    for k, f in keyed:
+        f['_k'] = k                           # each shown field remembers the piece it was built from
+    pieces = [k for k, _ in keyed]
     keyed, alias = join_fields(keyed, joins)
     fields = fold_islands(keyed, parents, year, alias)
+    shown, fallow = strict_fields(fields, land_regions(district_dir, year, proj, 'fallow', dark, only=set(want)))
+    left_off = {f['_k'] for f in fields} - {f['_k'] for f in shown}
+    # pieces of a field the stricter rule left off (or showed as fallow) leave the company and pace figures too
+    dropped = {k for k in pieces if alias.get(k, k) in left_off}
+    fields = [{a: b for a, b in f.items() if a != '_k'} for f in shown]
 
     squares = []
     for r in csv.DictReader(open(f'{district_dir}/squares.csv', encoding='utf-8')):
@@ -424,6 +459,8 @@ def build(district_dir, year, holders_csv, groups_csv, boundary_geojson, town_lo
 
     rows = []
     for r in table:
+        if (r['square'], r['field']) in dropped:
+            continue
         h = owner.get((r['square'], r['field']))
         if h:
             rows.append((h, types.get(h, ''), crops.get((r['square'], r['field']), 'unclear'), float(r['area_ha'])))
@@ -449,7 +486,7 @@ def build(district_dir, year, holders_csv, groups_csv, boundary_geojson, town_lo
         accounts = group_accounts(accounts, group_names[0])
 
     grain_rows = [(r['cut_middle'], float(r['area_ha']), owner.get((r['square'], r['field'])) in in_group)
-                  for r in table if crops.get((r['square'], r['field'])) in GRAIN]
+                  for r in table if crops.get((r['square'], r['field'])) in GRAIN and (r['square'], r['field']) not in dropped]
     crop_ha, sizes = defaultdict(float), {}
     for f in fields:
         crop_ha[f['c']] += f['ha']
@@ -459,7 +496,7 @@ def build(district_dir, year, holders_csv, groups_csv, boundary_geojson, town_lo
         s['ha'] += f['ha']
 
     return dict(
-        year=str(year), fields=fields, fallow=land_regions(district_dir, year, proj, 'fallow', dark, only=set(want)), squares=squares, outline=outline, plots=plot_outlines(plots, proj), town=list(proj(*town_lonlat)), origin=[lat0, lon0],
+        year=str(year), fields=fields, fallow=fallow, squares=squares, outline=outline, plots=plot_outlines(plots, proj), town=list(proj(*town_lonlat)), origin=[lat0, lon0],
         accounts=accounts, pace=pace(grain_rows, year),
         crop_ha={c: round(crop_ha.get(c, 0)) for c in ('grain', 'oilseed', 'other', 'none')}, sizes=sizes,
         totals=dict(fields=len(fields), ha=round(sum(x['ha'] for x in fields)),

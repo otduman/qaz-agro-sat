@@ -22,7 +22,7 @@ SHARE = 0.5
 PX = 10.0
 
 
-def pair_duplicates(a, b, dy, dx, a_ids, b_ids, share=SHARE):
+def pair_duplicates(a, b, dy, dx, a_ids, b_ids, share=SHARE, size_b=None):
     """{('a' or 'b', region dropped, region kept)}. a, b: label rasters on one 10 m lattice; B's pixel (r, c) is A's
     (r + dy, c + dx). a_ids, b_ids: the regions each square counts."""
     if not a_ids or not b_ids:
@@ -38,13 +38,56 @@ def pair_duplicates(a, b, dy, dx, a_ids, b_ids, share=SHARE):
         return set()
     pairs, counts = np.unique(np.stack([sa[ok], sb[ok]]), axis=1, return_counts=True)
     size_a = np.bincount(a.ravel())
-    size_b = np.bincount(b.ravel())
+    size_b = np.bincount(b.ravel()) if size_b is None else size_b   # B's whole regions when b is a resampled patch
     drop = set()
     for (ra, rb), n in zip(pairs.T, counts):
         na, nb = size_a[ra], size_b[rb]
         if n >= share * min(na, nb):
             drop.add(('a', int(ra), int(rb)) if na < nb else ('b', int(rb), int(ra)))
     return drop
+
+
+def _lon0(epsg):
+    return (int(epsg) - 32600) * 6 - 183
+
+
+def _inverse(e, n, lon0):
+    """UTM (east, north) arrays in the zone of central meridian lon0 -> (lon, lat) arrays."""
+    lon = np.full(np.shape(e), float(lon0))
+    lat = np.full(np.shape(e), 54.0)
+    for _ in range(12):
+        fe, fn = geo.utm42(lon, lat, lon0)
+        lon = lon + (e - fe) / (111320 * np.cos(np.radians(lat)))
+        lat = lat + (n - fn) / 111200
+    return lon, lat
+
+
+def onto(b, xb, yb, eb, shape_a, xa, ya, ea, px=PX):
+    """B's labels (top-left corner xb, yb, EPSG eb) resampled onto A's 10 m lattice (shape_a, corner xa, ya, EPSG ea),
+    nearest pixel, 0 where B has nothing (2026-11-16: squares on grids of another zone or offset were never
+    compared)."""
+    out = np.zeros(shape_a, np.int64)
+    # B's corners in A's frame bound the work
+    ce = np.array([xb, xb + b.shape[1] * px, xb, xb + b.shape[1] * px])
+    cn = np.array([yb, yb, yb - b.shape[0] * px, yb - b.shape[0] * px])
+    lon, lat = _inverse(ce, cn, _lon0(eb))
+    ae, an = geo.utm42(lon, lat, _lon0(ea))
+    c0 = max(0, int((ae.min() - xa) / px) - 2)
+    c1 = min(shape_a[1], int((ae.max() - xa) / px) + 3)
+    r0 = max(0, int((ya - an.max()) / px) - 2)
+    r1 = min(shape_a[0], int((ya - an.min()) / px) + 3)
+    if r0 >= r1 or c0 >= c1:
+        return out
+    cc, rr = np.meshgrid(np.arange(c0, c1), np.arange(r0, r1))
+    lon, lat = _inverse(xa + (cc + 0.5) * px, ya - (rr + 0.5) * px, _lon0(ea))
+    be, bn = geo.utm42(lon, lat, _lon0(eb))
+    bc = np.floor((be - xb) / px).astype(np.int64)
+    br = np.floor((yb - bn) / px).astype(np.int64)
+    ok = (bc >= 0) & (bc < b.shape[1]) & (br >= 0) & (br < b.shape[0])
+    sub = np.zeros(cc.shape, np.int64)
+    sub[ok] = b[br[ok], bc[ok]]
+    out[r0:r1, c0:c1] = sub
+    return out
 
 
 def _grid(path):
@@ -85,12 +128,15 @@ def main():
         (la, xa, ya, pa), ba = grids[a]
         for b in names[i + 1:]:
             (lb, xb, yb, pb), bb = grids[b]
-            if pa != pb or ba[2] < bb[0] or bb[2] < ba[0] or ba[3] < bb[1] or bb[3] < ba[1]:
+            if ba[2] < bb[0] or bb[2] < ba[0] or ba[3] < bb[1] or bb[3] < ba[1]:
                 continue
             dx, dy = (xb - xa) / PX, (ya - yb) / PX
-            if dx != int(dx) or dy != int(dy):
-                continue
-            for side, r, k in pair_duplicates(la, lb, int(dy), int(dx), counted[a], counted[b]):
+            if pa == pb and dx == int(dx) and dy == int(dy):
+                found = pair_duplicates(la, lb, int(dy), int(dx), counted[a], counted[b])
+            else:   # another zone or an offset grid: B resampled onto A's lattice
+                found = pair_duplicates(la, onto(lb, xb, yb, pb, la.shape, xa, ya, pa), 0, 0, counted[a], counted[b],
+                                        size_b=np.bincount(lb.ravel()))
+            for side, r, k in found:
                 out.add((a, f'{year}-F{r:04d}', b, f'{year}-F{k:04d}') if side == 'a' else
                         (b, f'{year}-F{r:04d}', a, f'{year}-F{k:04d}'))
     with open(f'{ddir}/duplicates-{year}.csv', 'w', encoding='utf-8', newline='') as fh:

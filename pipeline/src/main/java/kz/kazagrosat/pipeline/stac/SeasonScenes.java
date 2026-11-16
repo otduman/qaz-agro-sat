@@ -32,6 +32,12 @@ public record SeasonScenes(String tile, List<StacItem> scenes) {
      * season; the rest of each photo reads as no data, like cloud. Empty when no scene sees that much.
      */
     public static Optional<SeasonScenes> choose(List<StacItem> found, BoundingBox area) {
+        return choose(found, area, MOST);
+    }
+
+    /** As {@link #choose(List, BoundingBox)}, keeping a scene on a date with no whole cover when it sees at least
+     * {@code most} of the area (default {@link #MOST}). */
+    public static Optional<SeasonScenes> choose(List<StacItem> found, BoundingBox area, double most) {
         Map<String, List<StacItem>> byTile = found.stream()
                 .filter(scene -> SceneSelector.covers(scene, area))
                 .collect(Collectors.groupingBy(SeasonScenes::tileOf, TreeMap::new, Collectors.toList()));
@@ -48,7 +54,33 @@ public record SeasonScenes(String tile, List<StacItem> scenes) {
         Optional<Map.Entry<String, List<StacItem>>> best = byTile.entrySet().stream()
                 .max(Comparator.<Map.Entry<String, List<StacItem>>>comparingLong(e -> distinctDates(e.getValue()))
                         .thenComparing(Map.Entry::getKey, Comparator.reverseOrder()));
-        return best.map(entry -> new SeasonScenes(entry.getKey(), onePerDate(entry.getValue())));
+        return best.map(entry -> new SeasonScenes(entry.getKey(), withMostlyCovering(found, area, entry.getKey(),
+                entry.getValue(), most)));
+    }
+
+    /** A scene that sees at least this share of the area is kept on a date when no scene sees all of it. */
+    public static final double MOST = 0.5;
+
+    /**
+     * One scene per date on the tile: the least cloudy whole-cover scene, or on a date with none, the scene seeing
+     * the most of the area if it sees at least {@link #MOST} of it (the rest reads as no data, like cloud).
+     */
+    private static List<StacItem> withMostlyCovering(List<StacItem> found, BoundingBox area, String tile,
+            List<StacItem> whole, double most) {
+        List<StacItem> full = onePerDate(whole);
+        java.util.Set<LocalDate> fullDates = full.stream().map(SeasonScenes::dateOf)
+                .collect(Collectors.toSet());
+        Map<LocalDate, StacItem> extra = new TreeMap<>();
+        for (StacItem scene : found) {
+            if (!tileOf(scene).equals(tile) || fullDates.contains(dateOf(scene)) || share(scene, area) < most) {
+                continue;
+            }
+            extra.merge(dateOf(scene), scene, (a, b) -> share(a, area) >= share(b, area) ? a : b);
+        }
+        List<StacItem> all = new java.util.ArrayList<>(full);
+        all.addAll(extra.values());
+        all.sort(Comparator.comparing(SeasonScenes::dateOf));
+        return List.copyOf(all);
     }
 
     /**
@@ -56,6 +88,11 @@ public record SeasonScenes(String tile, List<StacItem> scenes) {
      * started on. Empty when no scene on that tile covers the area.
      */
     public static Optional<SeasonScenes> choose(List<StacItem> found, BoundingBox area, String tile) {
+        return choose(found, area, tile, MOST);
+    }
+
+    /** As {@link #choose(List, BoundingBox, String)} with the share of {@link #choose(List, BoundingBox, double)}. */
+    public static Optional<SeasonScenes> choose(List<StacItem> found, BoundingBox area, String tile, double most) {
         List<StacItem> onTile = found.stream()
                 .filter(scene -> tileOf(scene).equals(tile) && SceneSelector.covers(scene, area))
                 .toList();
@@ -63,8 +100,10 @@ public record SeasonScenes(String tile, List<StacItem> scenes) {
             onTile = found.stream()
                     .filter(scene -> tileOf(scene).equals(tile) && share(scene, area) >= MIN_PART)
                     .toList();
+            return onTile.isEmpty() ? Optional.empty() : Optional.of(new SeasonScenes(tile, onePerDate(onTile)));
         }
-        return onTile.isEmpty() ? Optional.empty() : Optional.of(new SeasonScenes(tile, onePerDate(onTile)));
+        return onTile.isEmpty() ? Optional.empty()
+                : Optional.of(new SeasonScenes(tile, withMostlyCovering(found, area, tile, onTile, most)));
     }
 
     /** A scene must see at least this share of the area to be kept when none sees all of it. */

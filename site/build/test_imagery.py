@@ -29,6 +29,16 @@ def test_pick_date_ignores_unstored():
     assert imagery.pick_date(r) == '2026-07-12'
 
 
+def test_pick_dates_uses_one_common_clear_day_where_it_can():
+    idx = {'A': rows(('2026-07-05', 0.99), ('2026-07-19', 1.0)),
+           'B': rows(('2026-07-05', 0.98), ('2026-07-19', 0.5)),
+           'C': rows(('2026-07-05', 0.97), ('2026-07-22', 1.0)),
+           'D': rows(('2026-07-12', 0.99), ('2026-07-30', 0.99))}
+    got = imagery.pick_dates(idx)
+    assert got['A'] == got['B'] == got['C'] == '2026-07-05', got   # the day most squares share clear
+    assert got['D'] == '2026-07-12', got                            # its own clear day nearest to it
+
+
 def test_true_colour_stretch():
     band = np.array([[1200, 3200]], dtype=np.uint16)
     rgb = imagery.true_colour(band, band, band)
@@ -64,6 +74,23 @@ def test_resample_places_pixels_and_masks_outside():
     ex, ey = geo.projector(lat0, lon0)(*geo.from_utm42(e0 - 500, n0 - 50))
     west = imagery.resample(src, (e0, n0, 10.0), (lat0, lon0), (ex - 0.02, ey - 0.02, ex + 0.02, ey + 0.02), 0.01)
     assert (west[..., 3] == 0).all()
+
+
+def test_balance_brings_a_dull_district_to_the_same_look():
+    # owner 2026-11-16: Tayynsha's photo looked duller and darker than the other districts'
+    rng = np.random.default_rng(1)
+    dull = np.zeros((50, 50, 4), np.uint8)
+    dull[..., :3] = rng.integers(60, 110, (50, 50, 3))
+    dull[..., 3] = 255
+    dull[:5, :5, 3] = 0                                   # no data: left alone
+    lut = imagery.balance_lut([dull])
+    out = imagery.apply_lut(dull, lut)
+    v = out[..., :3][dull[..., 3] > 0]
+    assert np.percentile(v, 1) <= 30 and np.percentile(v, 99) >= 200, (np.percentile(v, 1), np.percentile(v, 99))
+    assert (out[:5, :5] == dull[:5, :5]).all()
+    vivid = dull.copy(); vivid[..., :3] = rng.integers(10, 245, (50, 50, 3))
+    lut2 = imagery.balance_lut([vivid])
+    assert abs(int(lut2[0][128]) - 128) < 20             # a photo with full range is barely changed
 
 
 if __name__ == '__main__':

@@ -101,6 +101,28 @@ def test_fallow_regions_are_taken_once_from_the_square_whose_core_holds_them():
     assert district_data.land_regions(d, '2026', geo.projector(lat0, lon0), 'fallow', only={'E520N5900'}) == []
 
 
+def test_strict_fields_drop_small_ones_and_move_no_crop_ones_to_fallow():
+    fields = [dict(p=[0, 0, 1, 0, 1, 1], ha=120, c='grain'), dict(p=[2, 2, 3, 2, 3, 3], ha=30, c='grain'),
+              dict(p=[4, 4, 5, 4, 5, 5], ha=200, c='none')]
+    fallow = [dict(p=[9, 9, 8, 9, 8, 8], ha=40)]
+    kept, fal = district_data.strict_fields(fields, fallow, min_ha=50)
+    assert [f['ha'] for f in kept] == [120]
+    assert sorted(f['ha'] for f in fal) == [40, 200] and all(set(f) == {'p', 'ha'} for f in fal)
+
+
+def test_fallow_two_seasons_running_is_read_as_idle_land():
+    import tempfile
+    d = tempfile.mkdtemp()
+    assert district_data.idle_fallow(d, '2026') == set()
+    with open(f'{d}/fallow-both-2026.csv', 'w') as fh:
+        fh.write('square,region\nE500N5900,2026-F0007\n')
+    assert district_data.idle_fallow(d, '2026') == {('E500N5900', '2026-F0007')}
+    # fallow green or damp in spring is steppe (Esil, owner 2026-11-15): not farmland either
+    with open(f'{d}/fallow-steppe-2026.csv', 'w') as fh:
+        fh.write('square,region\nE500N5900,2026-F0009\n')
+    assert district_data.idle_fallow(d, '2026') == {('E500N5900', '2026-F0007'), ('E500N5900', '2026-F0009')}
+
+
 def test_an_island_is_the_region_almost_all_of_whose_border_touches_one_bigger_region():
     import numpy as np
     r = np.ones((10, 10), dtype=np.int64)       # region 1, a big field
@@ -214,13 +236,16 @@ def test_tayynsha_build_privacy():
         return
     d = district_data.build('data/tayynsha', '2026', 'data/tayynsha/holders.csv', 'data/tayynsha/company-groups.csv',
                             'docs/districts/tayynsha.geojson', (69.764, 53.848), 701)
-    assert len(d["fields"]) == 2775, len(d["fields"])  # gaps filled, tails trimmed, small fields joined, hybrid outlines, straight borders, holders via shared borders, readability joins, duplicates dropped, joins v3, islands folded
+    assert len(d["fields"]) == 2503, len(d["fields"])  # under 50 ha and no-crop fields left off, gaps filled, tails trimmed, small fields joined, hybrid outlines, straight borders, holders via shared borders, readability joins, duplicates dropped, joins v3, islands folded
     assert all(f['h'] is None for f in d['fields'] if f['k'] in ('farm', 'private', 'lease', 'college'))
     assert d['totals']['group_ha'] > 0
     # 'known holder' leaves out land whose holder the map hides: group share as published (about 42%)
     t = d['totals']
     assert t['known_ha'] < t['linked_ha'] and 0.40 < t['group_ha'] / t['known_ha'] < 0.44, t
     assert d['accounts'][0]['ha'] >= d['accounts'][-1]['ha']
+    # company hectares come only from the fields shown (no left-off small or no-crop fields)
+    assert 400000 < sum(a['ha'] for a in d['accounts']) < 403000, sum(a['ha'] for a in d['accounts'])   # 406,928 with them
+    assert all('_k' not in f for f in d['fields'])
     assert set(d['sizes']) <= {'group', 'company', 'farm', 'unread'}
     assert abs(sum(d['crop_ha'].values()) - d['totals']['ha']) < 50
 

@@ -67,6 +67,20 @@ public final class SeasonStackBuilder {
     }
 
     public StackReport build(BoundingBox area, int year, Path folder) throws IOException, InterruptedException {
+        return build(area, year, folder, SeasonScenes.MOST);
+    }
+
+    /** As {@link #build(BoundingBox, int, Path)}, keeping on a date with no whole cover a scene that sees at least
+     * {@code minShare} of the area. */
+    public StackReport build(BoundingBox area, int year, Path folder, double minShare)
+            throws IOException, InterruptedException {
+        return build(area, year, folder, minShare, null);
+    }
+
+    /** As {@link #build(BoundingBox, int, Path, double)}, on the given tile when {@code tile} is not null (a new
+     * stack only; a resumed one stays on its own tile). */
+    public StackReport build(BoundingBox area, int year, Path folder, double minShare, String tile)
+            throws IOException, InterruptedException {
         LocalDate from = LocalDate.of(year, 5, 1);
         LocalDate to = LocalDate.of(year, 10, 31);
         // Refused before any search: a folder holding another season stays as it is.
@@ -81,8 +95,9 @@ public final class SeasonStackBuilder {
                     + " with under " + (int) MAX_TILE_CLOUD + "% cloud over its tile. Check the area and the year.");
         }
         Optional<SeasonScenes> chosen = existing.isPresent()
-                ? SeasonScenes.choose(found, area, existing.get().tile())
-                : SeasonScenes.choose(found, area);
+                ? SeasonScenes.choose(found, area, existing.get().tile(), minShare)
+                : tile != null ? SeasonScenes.choose(found, area, tile, minShare)
+                : SeasonScenes.choose(found, area, minShare);
         SeasonScenes season = chosen.orElseThrow(() -> new IOException(existing.isPresent()
                 ? alreadyHolds(folder, existing.get()) + " No scene on that tile was found this time."
                 : "No single Sentinel-2 tile covers the whole area on any date in " + year

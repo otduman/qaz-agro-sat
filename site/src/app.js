@@ -38,8 +38,12 @@
     $('brand').innerHTML = esc(cfg.title[S.lang]) + (cfg.subtitle ? ` <span class="sub">${esc(cfg.subtitle[S.lang])}</span>` : '');
     $('district-switch').innerHTML = cfg.districts.map(d => `<button type="button" data-d="${d}" aria-pressed="${d === S.district}">${esc(ui.districts[d])}</button>`).join('');
     const ys = yearsOf(S.district);
+    // the season slider under the map, oldest season left; the year labels are buttons too
+    const asc = [...ys].sort();
     $('year-switch').hidden = ys.length < 2;
-    $('year-switch').innerHTML = ys.map(y => `<button type="button" data-y="${y}" aria-pressed="${y === S.year}">${y}</button>`).join('');
+    $('year-switch').innerHTML = `<span class="lab">${esc(t('nav.year'))}</span><div class="track">`
+      + `<input type="range" id="year-range" min="0" max="${asc.length - 1}" step="1" value="${asc.indexOf(S.year)}" aria-label="${esc(t('nav.year'))}" aria-valuetext="${S.year}">`
+      + `<div class="ticks">${asc.map(y => `<button type="button" data-y="${y}" aria-pressed="${y === S.year}">${y}</button>`).join('')}</div></div>`;
     $('lang-switch').innerHTML = cfg.languages.map(l => `<button type="button" data-l="${l}" aria-pressed="${l === S.lang}">${l.toUpperCase()}</button>`).join('');
     const a = $('author');
     a.hidden = !cfg.author;
@@ -205,6 +209,11 @@
         document.querySelectorAll('[data-mode]').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
         key();
       }
+    });
+    $('year-switch').addEventListener('change', e => {
+      if (e.target.id !== 'year-range') return;
+      const y = [...yearsOf(S.district)].sort()[+e.target.value];
+      if (y && y !== S.year) { S.year = y; showAll = false; render(); }
     });
     $('sat-toggle').addEventListener('click', e => { const on = !FieldMap.sat; FieldMap.setSat(on); e.currentTarget.setAttribute('aria-pressed', String(on)); });
     $('acc-more').addEventListener('click', () => { showAll = !showAll; table(); });

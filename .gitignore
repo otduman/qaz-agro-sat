@@ -21,3 +21,6 @@ data/
 site/dist/
 
 __pycache__/
+
+# Private working rules for Claude
+CLAUDE.local.md

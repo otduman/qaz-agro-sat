@@ -51,6 +51,45 @@ class SeasonScenesTest {
     }
 
     @Test
+    void addsMostlyCoveringScenesOnDatesWithNoWholeCover() {
+        // A pass edge runs through the area on some dates: those photos still see most of it (owner 2026-11-15:
+        // squares at a swath edge had half the dates of their neighbours).
+        StacItem whole = covering("T41UMV", "2025-07-12T07:20:00Z", 5);
+        StacItem mostly = scene("T41UMV", "2025-07-15T07:10:00Z", 5, new Envelope(62.0, 62.65, 53.0, 54.0));
+        StacItem sliver = scene("T41UMV", "2025-07-18T07:10:00Z", 5, new Envelope(62.0, 62.45, 53.0, 54.0));
+
+        SeasonScenes season = SeasonScenes.choose(List.of(whole, mostly, sliver), AREA).orElseThrow();
+
+        assertEquals(List.of(whole, mostly), season.scenes());
+    }
+
+    @Test
+    void aResumedDownloadAddsTheMostlyCoveringScenesToo() {
+        // A rerun on a stack made before 2026-11-15 must fill in the pass-edge dates a fresh run would keep.
+        StacItem whole = covering("T41UMV", "2025-07-12T07:20:00Z", 5);
+        StacItem mostly = scene("T41UMV", "2025-07-15T07:10:00Z", 5, new Envelope(62.0, 62.65, 53.0, 54.0));
+        StacItem otherTile = scene("T41UNV", "2025-07-18T07:10:00Z", 5, new Envelope(62.0, 62.65, 53.0, 54.0));
+
+        assertEquals(List.of(whole, mostly),
+                SeasonScenes.choose(List.of(whole, mostly, otherTile), AREA, "T41UMV").orElseThrow().scenes());
+    }
+
+    @Test
+    void aLowerShareCanBeAskedForASquareThatAPassAlwaysCutsUnderHalf() {
+        // E340N5700 (owner 2026-11-16): the other orbit sees only 35-48% of it on every date.
+        StacItem whole = covering("T41UMV", "2025-07-12T07:20:00Z", 5);
+        StacItem twoFifths = scene("T41UMV", "2025-07-15T07:10:00Z", 5, new Envelope(62.0, 62.52, 53.0, 54.0));
+        StacItem sliver = scene("T41UMV", "2025-07-18T07:10:00Z", 5, new Envelope(62.0, 62.45, 53.0, 54.0));
+
+        assertEquals(List.of(whole), SeasonScenes.choose(List.of(whole, twoFifths, sliver), AREA).orElseThrow().scenes());
+        assertEquals(List.of(whole, twoFifths),
+                SeasonScenes.choose(List.of(whole, twoFifths, sliver), AREA, 0.33).orElseThrow().scenes());
+        assertEquals(List.of(whole, twoFifths),
+                SeasonScenes.choose(List.of(whole, twoFifths, sliver), AREA, "T41UMV", 0.33).orElseThrow().scenes(),
+                "a resumed download takes the same share");
+    }
+
+    @Test
     void sticksToTheTileThatCoversTheAreaOnMostDates() {
         List<StacItem> found = List.of(
                 covering("T41UMV", "2025-07-12T07:10:00Z", 10),
@@ -96,8 +135,10 @@ class SeasonScenesTest {
     }
 
     @Test
-    void partlyCoveringScenesAreNotUsedWhenSomeDateCoversTheWholeArea() {
-        StacItem west = scene("T41UMV", "2025-07-12T07:10:00Z", 5, new Envelope(62.0, 62.58, 53.0, 54.0));
+    void scenesSeeingUnderHalfAreNotUsedWhenSomeDateCoversTheWholeArea() {
+        // Since 2026-11-15 a scene seeing at least half of the area is kept on a date with no whole cover
+        // (addsMostlyCoveringScenesOnDatesWithNoWholeCover); smaller slivers still are not.
+        StacItem west = scene("T41UMV", "2025-07-12T07:10:00Z", 5, new Envelope(62.0, 62.52, 53.0, 54.0));
         StacItem whole = covering("T41UMV", "2025-07-15T07:10:00Z", 5);
 
         assertEquals(List.of(whole), SeasonScenes.choose(List.of(west, whole), AREA).orElseThrow().scenes());

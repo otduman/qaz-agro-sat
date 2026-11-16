@@ -13,7 +13,7 @@ from PIL import Image
 import geo
 
 LOW, HIGH, GAMMA = 0.02, 0.22, 1 / 1.3
-OVERVIEW_KM, DETAIL_KM = 0.1, 0.02
+OVERVIEW_KM, DETAIL_KM = 0.05, 0.02   # overview 0.05 km since 2026-11-16 (was 0.1: blurry at district view)
 QUALITY = 72
 
 
@@ -27,6 +27,40 @@ def pick_date(index_rows):
     return None
 
 
+CLEAR_DAY = 0.95
+
+
+def pick_dates(indexes):
+    """{square: index rows} -> {square: date}: neighbouring squares on one common clear summer day, so the background
+    photo looks even (owner 2026-11-15). The common day is the July (else 15 June - 31 August) date clear
+    (CLEAR_DAY or more) on the most squares; a square not clear that day takes its own clear day nearest to it, and a
+    square with no clear day falls back to pick_date."""
+    from datetime import date as _d
+    count = {}
+    for rows in indexes.values():
+        for r in rows:
+            if r['status'] == 'stored' and float(r['clear_share']) >= CLEAR_DAY:
+                count[r['date']] = count.get(r['date'], 0) + 1
+    common = None
+    for lo, hi in (('-07-01', '-07-31'), ('-06-15', '-08-31')):
+        cand = [d for d in count if lo <= d[4:] <= hi]
+        if cand:
+            common = max(cand, key=lambda d: (count[d], d[4:] == '-07-15'))
+            break
+    out = {}
+    for sq, rows in indexes.items():
+        clear = [r['date'] for r in rows if r['status'] == 'stored' and float(r['clear_share']) >= CLEAR_DAY
+                 and '-06-15' <= r['date'][4:] <= '-08-31']
+        if common and common in clear:
+            out[sq] = common
+        elif common and clear:
+            c = _d.fromisoformat(common)
+            out[sq] = min(clear, key=lambda d: abs((_d.fromisoformat(d) - c).days))
+        else:
+            out[sq] = pick_date(rows)
+    return out
+
+
 def true_colour(red, green, blue, scale=1e-4, offset=-0.1):
     """uint16 surface reflectance bands -> uint8 HxWx3: reflectance LOW..HIGH stretched with a gamma."""
     out = []
@@ -35,6 +69,28 @@ def true_colour(red, green, blue, scale=1e-4, offset=-0.1):
         v = np.clip((refl - LOW) / (HIGH - LOW), 0, 1) ** GAMMA
         out.append(np.round(v * 255).astype(np.uint8))
     return np.dstack(out)
+
+
+def balance_lut(pictures, lo=1.0, hi=99.5, out_lo=10, out_hi=240):
+    """256-value lookup table (the same for red, green and blue, so colours keep their hue) that stretches the
+    district's pictures (HxWx4, alpha 0 = no data) from their lo..hi percentiles of all channels to out_lo..out_hi,
+    so every district gets the same brightness and contrast whatever the haze of its day (owner 2026-11-16: Tayynsha
+    looked duller and darker). Returns the table three times, one per channel."""
+    v = np.concatenate([p[..., :3][p[..., 3] > 0].ravel() for p in pictures]) if pictures else np.arange(256)
+    a, b = (np.percentile(v, [lo, hi]) if v.size else (0, 255))
+    b = max(b, a + 1)
+    x = np.arange(256, dtype=np.float32)
+    lut = np.clip(out_lo + (x - a) * (out_hi - out_lo) / (b - a), 0, 255).round().astype(np.uint8)
+    return [lut, lut, lut]
+
+
+def apply_lut(rgba, luts):
+    """rgba with each colour channel passed through its table; no-data pixels (alpha 0) unchanged."""
+    out = rgba.copy()
+    m = rgba[..., 3] > 0
+    for c in range(3):
+        out[..., c][m] = luts[c][rgba[..., c][m]]
+    return out
 
 
 def _pool(rgb, valid, f):
@@ -86,12 +142,12 @@ def _bbox_km(proj, box, lon0=69.0):
     return min(xs), min(ys), max(xs), max(ys)
 
 
-def _scene(district_dir, square):
+def _scene(district_dir, square, date=None):
     season = f'{district_dir}/{square}/season-2026'
     props = dict(l.strip().split('=', 1) for l in open(f'{season}/stack.properties', encoding='utf-8') if '=' in l)
     epsg, e0, n0, size, _, _ = props['grid'].split(',')
     rows = list(csv.DictReader(open(f'{season}/index.csv', encoding='utf-8')))
-    date = pick_date(rows)
+    date = date or pick_date(rows)
     if not date:
         return None
     meta = next(r for r in rows if r['date'] == date)
@@ -118,8 +174,15 @@ def district_pictures(district_dir, squares, origin, out_dir, rel_prefix):
     ow, oh = int(round((ox1 - ox0) / OVERVIEW_KM)), int(round((oy1 - oy0) / OVERVIEW_KM))
     canvas = np.zeros((oh, ow, 4), dtype=np.uint8)
     tiles = []
+    details = []
+    indexes = {}
     for q in squares:
-        scene = _scene(district_dir, q['id'])
+        p = f"{district_dir}/{q['id']}/season-2026/index.csv"
+        if os.path.isfile(p):
+            indexes[q['id']] = list(csv.DictReader(open(p, encoding='utf-8')))
+    dates = pick_dates(indexes)
+    for q in squares:
+        scene = _scene(district_dir, q['id'], dates.get(q['id']))
         if scene is None:
             continue
         rgb, valid, grid, date, glon0 = scene
@@ -128,7 +191,7 @@ def district_pictures(district_dir, squares, origin, out_dir, rel_prefix):
         f = int(round(DETAIL_KM * 1000 / grid[2]))
         prgb, pvalid = _pool(rgb, valid, f)
         detail = resample(prgb, (grid[0], grid[1], grid[2] * f), origin, (x0, y0, x1, y1), DETAIL_KM, pvalid, q['box'], glon0, blon0)
-        _save(detail, f"{out_dir}/{q['id']}.webp")
+        details.append((q['id'], detail))
         tiles.append(dict(id=q['id'], href=f"{rel_prefix}{q['id']}.webp", x=round(x0, 3), y=round(y0, 3),
                           w=round(detail.shape[1] * DETAIL_KM, 3), h=round(detail.shape[0] * DETAIL_KM, 3), date=date))
         # Overview: snap the square's box to the overview pixel grid and paste where it has data.
@@ -145,6 +208,9 @@ def district_pictures(district_dir, squares, origin, out_dir, rel_prefix):
         sub = canvas[cy0:cy0 + part.shape[0], cx0:cx0 + part.shape[1]]
         m = part[..., 3] > 0
         sub[m] = part[m]
-    _save(canvas, f'{out_dir}/overview.webp')
+    luts = balance_lut([canvas])          # one stretch per district, from its whole overview
+    for sid, detail in details:
+        _save(apply_lut(detail, luts), f"{out_dir}/{sid}.webp")
+    _save(apply_lut(canvas, luts), f'{out_dir}/overview.webp')
     return dict(overview=dict(href=f'{rel_prefix}overview.webp', x=round(ox0, 3), y=round(oy0, 3),
                               w=round(ow * OVERVIEW_KM, 3), h=round(oh * OVERVIEW_KM, 3)), tiles=tiles)
