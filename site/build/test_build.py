@@ -72,10 +72,17 @@ def _words_in(folder):
 
 def test_src_names_no_company():
     # the page source and interface text go into git: no company or group names
-    for p in glob.glob(f'{SRC}/**/*', recursive=True):
-        if os.path.isfile(p):
+    for p in glob.glob(f'{SRC}/**/*', recursive=True) + glob.glob(f'{SRC}/../build/method/*.html'):
+        if os.path.isfile(p) and not p.endswith(('.pdf', '.png', '.jpg', '.webp')):
             t = open(p, encoding='utf-8').read()
             assert not [n for n in NAMES if n in t], p
+
+
+def test_the_method_pdf_is_built_from_its_checked_source():
+    # metodika.pdf is binary; its words are checked in its source page site/build/method/metod.html
+    src = f'{SRC}/../build/method/metod.html'
+    assert os.path.isfile(f'{SRC}/metodika.pdf') and os.path.isfile(src)
+    assert not list(_words_in(f'{SRC}/../build/method'))
 
 
 def test_no_forbidden_words():
@@ -162,6 +169,128 @@ def test_every_field_lies_within_the_survey_squares():
         off = [f for f in d['fields'] + d['fallow']
                if not all(x0 <= x <= x1 for x in f['p'][0::2]) or not all(y0 <= y <= y1 for y in f['p'][1::2])]
         assert not off, (path, len(off))
+
+
+def test_half_date_is_the_day_the_satellite_saw_half_the_cereals_cut():
+    d = {'totals': dict(fields=1, ha=10, linked_ha=0, private_ha=0, group_ha=0, known_ha=0), 'fields': [], 'outline': [],
+         'accounts': [], 'squares': [], 'pace': {'all': [['2026-08-27', 0.49], ['2026-08-28', 0.5], ['2026-08-29', 0.6]]}}
+    v = build.tokens(d)
+    assert build.fill('{half_date}', v, 'ru') == '28 авг'
+    assert build.fill('{half_date}', v, 'en') == 'Aug 28'
+
+
+def test_headline_figures_come_from_our_own_data():
+    # owner 2026-11-17: area to harvest inside the district, combines now -> a modern fleet, large farms
+    for p in glob.glob(f'{CONTENT}/*.json'):
+        n = [s['n'] for s in load(p)['stats']]
+        assert n == ['{crop_inside}', '{fleet}', '{big_n}'], (p, n)   # owner 2026-11-17: no modern-fleet forecast
+
+
+def test_a_folded_group_row_counts_its_member_companies():
+    # 2026-11-17: the callout said "1 land user ... in the group" while the row chip said 10 companies
+    member = lambda n: {'name': 'x', 'group': True, 'ha': 1, 'n': n}
+    d = {'totals': dict(fields=1, ha=10, linked_ha=0, private_ha=0, group_ha=0, known_ha=0), 'fields': [], 'outline': [],
+         'squares': [], 'pace': {'all': []},
+         'accounts': [{'name': 'G', 'group': True, 'group_row': True, 'members_n': 3, 'ha': 3,
+                       'members': [member(1), member(2), member(1)]},
+                      {'name': 'other', 'group': False, 'ha': 1}]}
+    v = build.tokens(d)
+    assert v['group_cos'] == 4
+    assert v['companies'] == 5
+
+
+
+def _district(fields, accounts):
+    return {'totals': dict(fields=1, ha=10, linked_ha=0, private_ha=0, group_ha=0, known_ha=1), 'squares': [],
+            'pace': {'all': []}, 'outline': [[0, 0, 100, 0, 100, 100, 0, 100]], 'fields': fields, 'accounts': accounts}
+
+
+def test_combine_figures_use_the_area_inside_the_district():
+    # 2026-11-17: Sandyktau's headline counted all squares (595k ha) though the district has about 360k
+    sq = [10, 10, 20, 10, 20, 20, 10, 20]
+    out = [x + 200 for x in sq]
+    fields = [{'c': 'grain', 'ha': 2000, 'p': sq}, {'c': 'oilseed', 'ha': 600, 'p': sq},
+              {'c': 'grain', 'ha': 9000, 'p': out}, {'c': 'none', 'ha': 50, 'p': sq}]
+    v = build.tokens(_district(fields, []), combines={'n': 4, 'year': 2025})
+    assert v['crop_inside'] == 2600
+    assert v['fleet'] == 4
+    assert v['load'] == 650   # ha per combine: 2600 / 4
+    est = build.tokens(_district(fields, []))
+    assert est['fleet'] == '≈4'   # no official count: 2600 ha at about 700 ha a combine
+
+
+def test_large_farms_are_holders_with_5000_ha_or_more():
+    acc = [{'name': 'a', 'group': False, 'ha': 7000}, {'name': 'b', 'group': False, 'ha': 5000},
+           {'name': 'c', 'group': False, 'ha': 4999}]
+    v = build.tokens(_district([], acc))
+    assert v['big_n'] == 2 and v['big_ha'] == 12000
+
+
+def test_no_text_quotes_the_modern_farm_combine_load():
+    # owner 2026-11-17: 1,600-2,000 ha per combine undercounted fleets 2-3 times; only district averages are shown
+    for p in glob.glob(f'{CONTENT}/*.json'):
+        text = json.dumps(load(p), ensure_ascii=False)
+        assert 'современного хозяйства' not in text and "modern farm's" not in text, p
+
+
+def test_land_inside_sums_crops_fallow_and_grass_whose_centre_is_in_the_district():
+    sq = [10, 10, 20, 10, 20, 20, 10, 20]
+    out = [x + 200 for x in sq]
+    d = {'outline': [[0, 0, 100, 0, 100, 100, 0, 100]],
+         'fields': [{'c': 'grain', 'ha': 2000, 'p': sq}, {'c': 'oilseed', 'ha': 600, 'p': sq}, {'c': 'grain', 'ha': 9, 'p': out}],
+         'fallow': [{'ha': 300, 'p': sq}, {'ha': 7, 'p': out}], 'grass': [{'ha': 900, 'p': sq}, {'ha': 5, 'p': out}]}
+    assert build.land_inside(d) == {'grain': 2000, 'oilseed': 600, 'fallow': 300, 'grass': 900}
+
+def test_pace_counts_only_grain_fields_whose_centre_is_in_the_district():
+    sq = [10, 10, 20, 10, 20, 20, 10, 20]
+    out = [x + 200 for x in sq]
+    d = {'year': '2026', 'outline': [[0, 0, 100, 0, 100, 100, 0, 100]],
+         'fields': [{'c': 'grain', 'ha': 300, 'p': sq, 'm': '2026-08-20', 'k': 'group'},
+                    {'c': 'grain', 'ha': 100, 'p': sq, 'm': '', 'k': 'farm'},
+                    {'c': 'oilseed', 'ha': 500, 'p': sq, 'm': '2026-08-01', 'k': 'farm'},
+                    {'c': 'grain', 'ha': 900, 'p': out, 'm': '', 'k': 'farm'}]}
+    p = dict(build.pace_inside(d)['all'])
+    assert p['2026-08-19'] == 0 and p['2026-08-20'] == 0.75 and p['2026-10-01'] == 0.75
+    assert dict(build.pace_inside(d)['group'])['2026-08-20'] == 1.0
+
+
+def test_field_history_takes_each_other_seasons_class_where_it_covers_most_of_the_field():
+    sq = [0, 0, 10, 0, 10, 10, 0, 10]
+    part = [0, 0, 4, 0, 4, 10, 0, 10]   # 40% of sq
+    far = [50, 50, 60, 50, 60, 60, 50, 60]
+    seasons = {
+        '2026': {'fields': [{'c': 'grain', 'p': sq}, {'c': 'oilseed', 'p': far}], 'fallow': [], 'grass': []},
+        '2025': {'fields': [{'c': 'oilseed', 'p': sq}], 'fallow': [{'p': far}], 'grass': []},
+        '2024': {'fields': [{'c': 'grain', 'p': part}], 'fallow': [], 'grass': [], 'crop_split': False},
+    }
+    build.add_history(seasons)
+    a, b = seasons['2026']['fields']
+    assert a['y'] == {'2025': 'oilseed', '2024': None}   # 2024 covers only 40% of it
+    assert b['y'] == {'2025': 'fallow', '2024': None}
+    assert seasons['2024']['fields'][0]['y'] == {'2026': 'grain', '2025': 'oilseed'}
+    assert seasons['2025']['fields'][0]['y'] == {'2026': 'grain', '2024': None}
+
+
+def test_field_history_says_crops_where_a_seasons_crop_split_is_unreliable():
+    sq = [0, 0, 10, 0, 10, 10, 0, 10]
+    seasons = {'2026': {'fields': [{'c': 'grain', 'p': sq}], 'fallow': [], 'grass': []},
+               '2024': {'fields': [{'c': 'oilseed', 'p': sq}], 'fallow': [], 'grass': [], 'crop_split': False}}
+    build.add_history(seasons)
+    assert seasons['2026']['fields'][0]['y'] == {'2024': 'crops'}
+
+
+def test_curves_keep_the_shown_fields_s2_greenness_on_dates_at_least_half_clear():
+    import tempfile
+    d = tempfile.mkdtemp()
+    os.makedirs(f'{d}/E1N1/series-2026')
+    rows = ['field,date,clear_share,ndvi_median,satellite',
+            '2026-F0007,2026-06-01,0.9,0.412,S2', '2026-F0007,2026-06-06,0.3,0.700,S2',
+            '2026-F0007,2026-06-09,0.8,0.550,LC08', '2026-F0007,2026-06-11,0.6,0.633,S2',
+            '2026-F0009,2026-06-11,1.0,0.200,S2', '2026-F0099,2026-06-11,1.0,0.900,S2']
+    with open(f'{d}/E1N1/series-2026/series-2026.csv', 'w') as fh:
+        fh.write('\n'.join(rows) + '\n')
+    out = build.curves(d, '2026', {'E1N1': {7, 9}})
+    assert out == {'E1N1': {'d': ['06-01', '06-11'], 'f': {'7': [41, 63], '9': [None, 20]}}}, out
 
 
 if __name__ == '__main__':

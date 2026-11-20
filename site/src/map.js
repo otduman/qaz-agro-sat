@@ -21,10 +21,19 @@ const FieldMap = (() => {
   }
   const classOf = (f, mode) => mode === 'crop' ? 'c-' + f.c : timeClass(f);
 
+  // Insets: screen pixels on the left and right covered by panes laid over the map; the district is fitted into
+  // the free middle so no field starts hidden under a pane.
+  let insets = { left: 0, right: 0 };
   function fit() {
-    const pad = 2, w = ext.x1 - ext.x0 + 2 * pad, h = ext.y1 - ext.y0 + 2 * pad, x = ext.x0 - pad, y = ext.y0 - pad, want = ratio();
-    if (w / h > want) { const nh = w / want; return { x, y: y - (nh - h) / 2, w, h: nh }; }
-    const nw = h * want; return { x: x - (nw - w) / 2, y, w: nw, h };
+    const pad = 2, w = ext.x1 - ext.x0 + 2 * pad, h = ext.y1 - ext.y0 + 2 * pad, x = ext.x0 - pad, y = ext.y0 - pad;
+    const r = svg.getBoundingClientRect(), W = r.width || 1, H = r.height || 1;
+    // cover, not contain: the district fills the whole map box and its far edges are panned to (owner 2026-11-17);
+    // the view is centred on the free middle between the panes
+    const want = W / H;
+    let fw = w, fh = h, fx = x, fy = y;
+    if (w / h > want) { fw = h * want; fx = x + (w - fw) / 2; } else { fh = w / want; fy = y + (h - fh) / 2; }
+    const shift = (insets.left - insets.right) / 2 / W * fw;   // the panes' middle, in map km
+    return { x: fx - shift, y: fy, w: fw, h: fh };
   }
 
   function loadTiles() {
@@ -51,14 +60,16 @@ const FieldMap = (() => {
   }
 
   function paint() {
-    els.forEach((e, i) => e.setAttribute('class', 'f ' + classOf(D.fields[i], state.mode) + (state.sel === i ? ' on' : '')));
+    els.forEach((e, i) => e.setAttribute('class', 'f ' + classOf(D.fields[i], state.mode) + (state.sel === i ? ' on' : '')
+      + (state.hl && state.hl(D.fields[i]) ? ' hl' : '')));
+    svg.parentNode.classList.toggle('hlmode', !!state.hl);
     svg.parentNode.classList.toggle('sat', state.sat && !!D.imagery);
     gImg.style.display = state.sat ? '' : 'none';
     loadTiles();
   }
 
   function load(data, strings, townName) {
-    D = data; ui = strings; state.sel = null; loaded = new Set();
+    D = data; ui = strings; state.sel = null; state.hl = null; loaded = new Set();
     svg.innerHTML = '';
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
     D.fields.forEach(f => { for (let i = 0; i < f.p.length; i += 2) { x0 = Math.min(x0, f.p[i]); x1 = Math.max(x1, f.p[i]); y0 = Math.min(y0, f.p[i + 1]); y1 = Math.max(y1, f.p[i + 1]); } });
@@ -71,12 +82,28 @@ const FieldMap = (() => {
       gImg.appendChild(mk('image', { href: o.href, x: o.x, y: o.y, width: o.w, height: o.h, preserveAspectRatio: 'none' }));
     }
     gTiles = mk('g', {}); gImg.appendChild(gTiles);
+    // grass: hay and pasture (owner 2026-11-16), a soft wash under everything else
+    // 2026-11-19: one see-through group per use (pasture / old field / steppe; 'all' when no use is listed), no
+    // outline of its own, so touching pieces read as one area
+    const gGrass = mk('g', {});
+    const useG = {};
+    (D.grass || []).forEach(q => {
+      const u = q.u || 'all';
+      if (!useG[u]) { useG[u] = mk('g', { class: `grassuse u-${u}` }); gGrass.appendChild(useG[u]); }
+      useG[u].appendChild(mk('path', { d: pathOf(q.p), class: 'grasspatch' }));
+    });
     const gFallow = mk('g', {});
     (D.fallow || []).forEach(q => gFallow.appendChild(mk('path', { d: pathOf(q.p), class: 'fallowpatch' })));
     const gOut = mk('g', {});
     D.outline.forEach(r => gOut.appendChild(mk('path', { d: pathOf(r), class: 'district' })));
     gF = mk('g', {});
-    els = D.fields.map((f, i) => { const e = mk('path', { d: pathOf(f.p) }); e.dataset.i = i; gF.appendChild(e); return e; });
+    // a dark edge under each field's coloured outline, so fields stand out on a bright photo (owner 2026-11-16)
+    const gEdge = mk('g', {});
+    els = D.fields.map((f, i) => {
+      const d = pathOf(f.p);
+      gEdge.appendChild(mk('path', { d, class: 'edge' }));
+      const e = mk('path', { d }); e.dataset.i = i; gF.appendChild(e); return e;
+    });
     const gTown = mk('g', {});
     townDot = mk('circle', { class: 'townmark', cx: D.town[0], cy: D.town[1], r: 0.6 });
     townLabel = mk('text', { class: 'maplabel', x: D.town[0] + 1.2, y: D.town[1] + 0.5 });
@@ -89,7 +116,7 @@ const FieldMap = (() => {
     const hatch = mk('pattern', { id: 'fallow-hatch', patternUnits: 'userSpaceOnUse', width: 0.3, height: 0.3, patternTransform: 'rotate(45)' });
     hatch.append(mk('rect', { width: 0.3, height: 0.3, class: 'hatch-bg' }), mk('rect', { width: 0.11, height: 0.3, class: 'hatch-line' }));
     defs.appendChild(hatch);
-    svg.append(defs, gSurvey, gImg, gFallow, gOut, gF, gPlots, gTown);
+    svg.append(defs, gSurvey, gImg, gGrass, gFallow, gOut, gEdge, gF, gPlots, gTown);
     vb = fit(); setVB(); paint();
   }
 
@@ -128,6 +155,11 @@ const FieldMap = (() => {
 
   return {
     init, load, classOf,
+    get data() { return D; },
+    // select a field as a click would (the card shows it); highlight the fields a test picks (null clears)
+    select: i => { state.sel = i; paint(); onPick(D.fields[i]); },
+    highlight: pred => { state.hl = pred; if (D) paint(); },
+    setInsets: (l, rr) => { insets = { left: l, right: rr }; },
     zoom: k => zoomAt(k),
     reset: () => { if (ext) { vb = fit(); setVB(); } },
     setMode: m => { state.mode = m; if (D) paint(); },

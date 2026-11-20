@@ -55,12 +55,27 @@ const Charts = (() => {
     hbars(document.getElementById('ch-sizes'), rows, r => `${F.int(Math.round(r.v))} ${ui.map.ha} · ${F.int(r.n)}`);
   }
 
+  // Land inside the district by kind: crops, fallow and grass (hay and pasture together), thousand ha.
+  // A season whose crop split is unreliable (content crop_split: false) shows cereals and oilseeds as one bar.
+  function land(D, C, ui, F) {
+    const S = ui.legend.short, split = C.crop_split !== false;
+    const l = split ? D.land_inside : { ...D.land_inside, crops: D.land_inside.grain + D.land_inside.oilseed };
+    const crops = split ? [['grain', 'var(--grain)', S.grain], ['oilseed', 'var(--oil)', S.oilseed]]
+      : [['crops', 'var(--grain)', S.crops]];
+    const rows = [...crops, ['fallow', 'var(--fallow-line)', S.fallow], ['grass', 'var(--grass)', ui.charts.grass_long]]
+      .filter(([k]) => l[k] > 0)
+      .map(([k, col, lab]) => ({ v: l[k], col, label: lab, title: `${lab}: ${F.int(Math.round(l[k] / 1000))} ${ui.map.thousand_ha}` }));
+    hbars(document.getElementById('ch-land'), rows, r => F.int(Math.round(r.v / 1000)));
+  }
+
   // Crop mix: our shares against the official ones, two stacked bars.
   function crops(D, C, ui) {
     const svg = document.getElementById('ch-crops'), W = widthOf(svg);
     const c = D.crop_ha_inside || D.crop_ha, tot = (c.grain + c.oilseed + c.other) || 1;
     const ours = { grain: c.grain / tot, oilseed: c.oilseed / tot, other: c.other / tot };
     const keys = [['grain', 'var(--grain)'], ['oilseed', 'var(--oil)'], ['other', 'var(--other)']];
+    // the third part is sown fodder (the official figure), not the grass layer of hay and pasture
+    const name = k => k === 'other' ? ui.charts.fodder : ui.legend[k];
     const L = 100, R = 4, rowH = 46, H = 2 * rowH + 4;
     let h = '';
     [[ui.charts.ours, ours], [ui.charts.official, C.official.crop_share]].forEach(([lab, s], i) => {
@@ -70,13 +85,13 @@ const Charts = (() => {
         const w = s[k] * (W - L - R);
         if (w <= 0) return;
         const pct = Math.round(s[k] * 100);
-        h += `<g><title>${esc(lab)} · ${esc(ui.legend[k])}: ${pct}%</title><rect x="${x.toFixed(1)}" y="${y + 6}" width="${Math.max(1, w - 2).toFixed(1)}" height="28" rx="3" fill="${col}"/>`
+        h += `<g><title>${esc(lab)} · ${esc(name(k))}: ${pct}%</title><rect x="${x.toFixed(1)}" y="${y + 6}" width="${Math.max(1, w - 2).toFixed(1)}" height="28" rx="3" fill="${col}"/>`
           + (w > 44 ? `<text x="${(x + 8).toFixed(1)}" y="${y + 25}" style="font:500 12px var(--font-data);fill:#fff">${pct}%</text>` : '') + '</g>';
         x += w;
       });
     });
     put(svg, W, H, h);
-    document.getElementById('lg-crops').innerHTML = legendHTML(keys.map(([k, col]) => [col, ui.legend[k], 1]));
+    document.getElementById('lg-crops').innerHTML = legendHTML(keys.map(([k, col]) => [col, name(k), 1]));
   }
 
   // Harvest pace: all fields, the grain group and the rest, plus the official point.
@@ -133,6 +148,7 @@ const Charts = (() => {
     const { D, C, ui, F } = last;
     if (D.accounts.length) companies(D, ui, F);
     if (C.official) crops(D, C, ui);
+    if (D.land_inside) land(D, C, ui, F);
     sizes(D, ui, F);
     pace(D, C, ui);
   }
@@ -142,7 +158,8 @@ const Charts = (() => {
     document.getElementById('charts').innerHTML =
       (D.accounts.length ? shell('companies', ui.charts.companies_title, D.accounts.some(a => a.group) ? ui.charts.companies_note : ui.charts.companies_note_plain, true) : '')
       + (C.official ? shell('crops', ui.charts.crops_title, ui.charts.crops_note + ' ' + C.official.label, false) : '')
-      + shell('sizes', ui.charts.sizes_title, ui.charts.sizes_note, !C.official);
+      + (D.land_inside ? shell('land', ui.charts.land_title, ui.charts.land_note, false) : '')
+      + shell('sizes', ui.charts.sizes_title, ui.charts.sizes_note, !!C.official === !D.land_inside ? false : true);
     draw();
     lastW = document.getElementById('charts').clientWidth;
   }

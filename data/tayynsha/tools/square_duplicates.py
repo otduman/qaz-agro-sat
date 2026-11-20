@@ -47,6 +47,12 @@ def pair_duplicates(a, b, dy, dx, a_ids, b_ids, share=SHARE, size_b=None):
     return drop
 
 
+def near(ba, bb, margin=2000.0):
+    """Two squares' boxes (e0, n0, e1, n1) overlap or lie within margin metres: a square's field map reaches past its
+    box (the boxes are counting cores), so such squares can draw the same field (2026-11-16)."""
+    return not (ba[2] + margin < bb[0] or bb[2] + margin < ba[0] or ba[3] + margin < bb[1] or bb[3] + margin < ba[1])
+
+
 def _lon0(epsg):
     return (int(epsg) - 32600) * 6 - 183
 
@@ -128,7 +134,7 @@ def main():
         (la, xa, ya, pa), ba = grids[a]
         for b in names[i + 1:]:
             (lb, xb, yb, pb), bb = grids[b]
-            if ba[2] < bb[0] or bb[2] < ba[0] or ba[3] < bb[1] or bb[3] < ba[1]:
+            if not near(ba, bb):
                 continue
             dx, dy = (xb - xa) / PX, (ya - yb) / PX
             if pa == pb and dx == int(dx) and dy == int(dy):

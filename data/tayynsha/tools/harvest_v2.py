@@ -41,6 +41,13 @@ FEATS = ('b11', 'b12', 'ndti', 'brightness', 'ndvi_median', 'line_strength')
 NOISE = {'b11': 0.014, 'b12': 0.014, 'ndti': 0.024, 'brightness': 0.009, 'ndvi_median': 0.018, 'line_strength': 0.046}
 WEIGHT = {'b11': 1.0, 'b12': 1.0, 'ndti': 1.0, 'brightness': 1.0, 'ndvi_median': 0.5, 'line_strength': 0.5}
 REDATE = ('dated', 'no cut found', 'cut in a cloud gap')
+# Crop seen v3 (data/experiments/esil-nocrop-2024-11-20/NOTE.md, fresh check 20/22): the jar calls a field 'no crop
+# seen' from dates at least 85% clear only, so a crop whose green peak fell on partly clear dates (Esil, July 2024) was
+# lost. Such a field is a crop field when it was bare and even in spring (a seedbed; steppe, grass and wetland are
+# green, patchy or wet), green in summer on a date at least GREEN_CLEAR clear, and not ploughed bare in July.
+SPRING, SPRING_MAX, SPREAD, SPREAD_CLEAR = ('05-01', '06-10'), 0.30, 0.04, 0.80
+GREEN, GREEN_NDVI, GREEN_CLEAR = ('06-20', '08-20'), 0.55, 0.40
+JULY_END, PLOUGHED, SEEN_CLEAR = '07-31', 0.25, 0.60
 
 
 def _ord(s):
@@ -124,12 +131,52 @@ def date_cut(rows, year, ripening):
                 readings=len(o))
 
 
-def rewrite(old_rows, series_by_field, ripening, year):
-    """The jar's harvest rows with v2 dates for fields it dated, found no cut in or put in a cloud gap; other rows
-    (no crop seen, unclear, non-field land) as they were. Same columns."""
+def _ndvi(r, clear):
+    """Field NDVI of a raw reading at least `clear` clear and not snowy, else None."""
+    try:
+        if float(r['clear_share'] or 0) < clear or float(r.get('snow_share') or 0) > 0.02 or r['ndvi_median'] == '':
+            return None
+        return float(r['ndvi_median'])
+    except ValueError:
+        return None
+
+
+def crop_seen(raw_rows):
+    """Crop seen v3 on a field's raw series (any satellite)."""
+    md = lambda r: r['date'][5:]
+    spring = [v for r in raw_rows if SPRING[0] <= md(r) <= SPRING[1] and (v := _ndvi(r, SEEN_CLEAR)) is not None]
+    if not spring or max(spring) >= SPRING_MAX or min(spring) < 0:
+        return False
+    spread = sorted(float(r['ndvi_p75']) - float(r['ndvi_p25']) for r in raw_rows
+                    if SPRING[0] <= md(r) <= SPRING[1] and _ndvi(r, SPREAD_CLEAR) is not None
+                    and r.get('ndvi_p75') not in (None, '') and r.get('ndvi_p25') not in (None, ''))
+    if not spread or spread[len(spread) // 2] >= SPREAD:
+        return False
+    green = [(md(r), v) for r in raw_rows if GREEN[0] <= md(r) <= GREEN[1] and (v := _ndvi(r, GREEN_CLEAR)) is not None]
+    if not green:
+        return False
+    peak_day, peak = max(green, key=lambda x: x[1])
+    if peak < GREEN_NDVI:
+        return False
+    return not any(v < PLOUGHED for r in raw_rows
+                   if peak_day < md(r) <= JULY_END and (v := _ndvi(r, SEEN_CLEAR)) is not None)
+
+
+def drop_reverted(rows, land_by_id):
+    """Leave out field rows whose region the field map no longer calls a field (drop_no_crop.py sent it back to other
+    or fallow after the jar's run, so the jar's copy still lists it)."""
+    return [r for r in rows if not (r['land'] == 'field' and land_by_id.get(r['field'], 'field') != 'field')]
+
+
+def rewrite(old_rows, series_by_field, ripening, year, raw=None):
+    """The jar's harvest rows with v2 dates for fields it dated, found no cut in or put in a cloud gap, and for 'no
+    crop seen' fields whose raw series (`raw`, field -> rows) shows a crop by crop_seen; other rows (no crop seen,
+    unclear, non-field land) as they were. Same columns."""
+    raw = raw or {}
     out = []
     for r in old_rows:
-        if r['land'] != 'field' or r['status'] not in REDATE or r['field'] not in series_by_field:
+        redate = r['status'] in REDATE or (r['status'] == 'no crop seen' and crop_seen(raw.get(r['field'], [])))
+        if r['land'] != 'field' or not redate or r['field'] not in series_by_field:
             out.append(r)
             continue
         x = date_cut(series_by_field[r['field']], year, ripening.get(r['field']))
@@ -145,12 +192,15 @@ def main():
     if not os.path.isfile(v1):
         shutil.copy(cur, v1)
     old = list(csv.DictReader(open(v1, encoding='utf-8')))
+    fp = f'{sq}/series-{year}/fields-{year}.csv'
+    if os.path.isfile(fp):
+        old = drop_reverted(old, {r['id']: r['land'] for r in csv.DictReader(open(fp, encoding='utf-8'))})
     ser = {}
     for r in csv.DictReader(open(f'{sq}/series-{year}/series-{year}.csv', encoding='utf-8')):
         ser.setdefault(r['field'], []).append(r)
     crops = f'{sq}/crops-{year}-v2.csv'
     ripening = {r['field']: r['ripening'] for r in csv.DictReader(open(crops, encoding='utf-8'))} if os.path.isfile(crops) else {}
-    new = rewrite(old, detrend(ser), ripening, year)
+    new = rewrite(old, detrend(ser), ripening, year, raw=ser)
     with open(cur, 'w', newline='', encoding='utf-8') as fh:
         w = csv.DictWriter(fh, fieldnames=list(old[0]))
         w.writeheader()

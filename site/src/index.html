@@ -7,114 +7,135 @@
 <meta name="description" content="Поля, культуры, сроки уборки и землепользователи по спутниковым снимкам и публичной кадастровой карте. Fields, crops, harvest dates and land users from satellite images and the public cadastral map.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:wght@500;600&family=Archivo:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap&subset=cyrillic">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Literata:opsz,wght@7..72,500;7..72,700&family=Golos+Text:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <div class="topbar">
   <div class="topin">
-    <a class="brand" id="brand" href="#">QazAgroSat <span class="sub">Атлас полей</span></a>
-    <div class="switches">
-      <div class="seg small" role="group" id="district-switch" data-t-aria="nav.district"></div>
+    <a class="brand" id="brand" href="#"><span class="name">QazAgroSat</span><span class="sub">Атлас полей</span></a>
+    <nav class="toplinks">
+      <a class="how" href="#how"><span data-t="nav.method"></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M6 13l6 6 6-6"/></svg></a>
       <div class="seg small" role="group" id="lang-switch" data-t-aria="nav.language"></div>
-    </div>
+    </nav>
   </div>
 </div>
 
-<div class="wrap" id="page" aria-busy="true">
+<div id="page" aria-busy="true">
   <div class="loading" id="loading" role="status">Загрузка… / Loading…</div>
-  <p class="loaderr" id="load-error" role="alert" hidden></p>
-  <header>
-    <div class="eyebrow" id="eyebrow"></div>
-    <h1 id="title"></h1>
-    <p class="lede" id="lede"></p>
-    <p class="meta" id="meta"></p>
-  </header>
-
-  <section data-t-aria="sections.stats">
-    <div class="stats" id="stats"></div>
-  </section>
-
-  <section aria-labelledby="map-h">
-    <div class="read">
-      <h2 id="map-h" data-t="sections.map"></h2>
-      <p id="map-intro"></p>
-    </div>
-    <div class="controls">
-      <div class="seg" role="group" data-t-aria="map.modes_aria">
-        <button type="button" data-mode="crop" aria-pressed="true" data-t="map.crop"></button>
-        <button type="button" data-mode="time" aria-pressed="false" data-t="map.time"></button>
+  <div class="frame">
+    <p class="loaderr" id="load-error" role="alert" hidden></p>
+    <header class="hero">
+      <div class="hero-l">
+        <p class="eyebrow" id="eyebrow"></p>
+        <details class="dpick" id="dpick">
+          <summary><h1 id="title"></h1><span class="chev" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></span></summary>
+          <div class="dmenu" id="district-menu" role="group" data-t-aria="nav.district"></div>
+        </details>
+        <p class="lede" id="lede"></p>
+        <p class="meta" id="meta"></p>
       </div>
-      <button type="button" class="toggle" id="sat-toggle" aria-pressed="true"><span class="dot" aria-hidden="true"></span><span data-t="map.satellite"></span></button>
-    </div>
-    <div class="mapgrid">
-      <div class="mapcol">
-      <div class="mapbox">
-        <svg id="map" role="img" data-t-aria="map.aria"></svg>
-        <div class="zoom">
-          <button type="button" id="z-in" data-t-aria="map.zoom_in"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
-          <button type="button" id="z-out" data-t-aria="map.zoom_out"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg></button>
-          <button type="button" id="z-reset" data-t-aria="map.reset"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+      <div class="stats" id="stats" data-t-aria="sections.stats" role="group"></div>
+    </header>
+  </div>
+
+  <section class="mapsec" aria-labelledby="map-h">
+    <h2 id="map-h" class="vh" data-t="sections.map"></h2>
+    <div class="mapbox" id="mapbox">
+      <svg id="map" role="img" data-t-aria="map.aria"></svg>
+      <div class="ov ov-left">
+        <details class="pane mpick" id="mpick">
+          <summary><span class="eyebrow" data-t="nav.district"></span><span id="mpick-name"></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></summary>
+          <div class="dlist" id="district-switch" role="group" data-t-aria="nav.district"></div>
+        </details>
+        <div class="pane keypane">
+          <div class="seg" role="group" data-t-aria="map.modes_aria">
+            <button type="button" data-mode="crop" aria-pressed="true" data-t="map.crop"></button>
+            <button type="button" data-mode="time" aria-pressed="false" data-t="map.time"></button>
+          </div>
+          <div id="key" aria-live="polite"></div>
+          <button type="button" class="toggle" id="sat-toggle" aria-pressed="true"><span class="dot" aria-hidden="true"></span><span data-t="map.satellite"></span></button>
         </div>
-        <div class="scale" id="scale"></div>
-        <div class="credit" id="credit" data-t="map.imagery_credit"></div>
       </div>
-      <div class="seasons" role="group" id="year-switch" data-t-aria="nav.year" hidden></div>
+      <div class="ov ov-right">
+        <div class="pane" id="panel" aria-live="polite"></div>
       </div>
-      <div class="side">
-        <div class="card" id="key" aria-live="polite"></div>
-        <div class="card" id="panel" aria-live="polite"></div>
+      <div class="zoom">
+        <button type="button" id="z-in" data-t-aria="map.zoom_in"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+        <button type="button" id="z-out" data-t-aria="map.zoom_out"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg></button>
+        <button type="button" id="z-reset" data-t-aria="map.reset"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+        <button type="button" id="z-full" data-t-aria="map.fullscreen"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></button>
       </div>
+      <div class="seasons pane" role="group" id="year-switch" data-t-aria="nav.year" hidden></div>
+      <div class="scale" id="scale"></div>
+      <div class="credit" id="credit" data-t="map.imagery_credit"></div>
     </div>
-    <p class="note" id="map-note"></p>
+    <p class="mapcap" id="map-note"></p>
   </section>
 
-  <section aria-labelledby="acc-h">
-    <div class="read">
-      <h2 id="acc-h" data-t="sections.accounts"></h2>
-      <p id="acc-intro"></p>
-    </div>
-    <div class="callout" id="callout" hidden><p id="callout-text"></p></div>
-    <div class="tablewrap">
-      <table id="acc">
-        <caption id="acc-caption"></caption>
-        <thead><tr></tr></thead>
-        <tbody></tbody>
-      </table>
-    </div>
-    <button type="button" class="more" id="acc-more" aria-controls="acc" hidden></button>
-    <p class="note" id="pair-note" hidden></p>
-    <p class="note" id="private-note"></p>
-  </section>
+  <div class="wrap report">
+    <section class="sec" aria-labelledby="acc-h">
+      <span class="num">01 · <span data-t="short.accounts"></span></span>
+      <div class="body">
+        <div class="read">
+          <h2 id="acc-h" data-t="sections.accounts"></h2>
+          <p id="acc-intro"></p>
+        </div>
+        <div class="callout" id="callout" hidden><p id="callout-text"></p></div>
+        <div class="accsearch"><label for="acc-search" data-t="table.search"></label><input type="search" id="acc-search" autocomplete="off"></div>
+        <div class="tablewrap">
+          <table id="acc">
+            <caption id="acc-caption"></caption>
+            <thead><tr></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <button type="button" class="more" id="acc-more" aria-controls="acc" hidden></button>
+        <p class="note" id="pair-note" hidden></p>
+        <p class="note" id="private-note"></p>
+      </div>
+    </section>
 
-  <section aria-labelledby="charts-h">
-    <div class="read">
-      <h2 id="charts-h" data-t="sections.charts"></h2>
-      <p id="charts-intro"></p>
-    </div>
-    <div class="chartgrid" id="charts"></div>
-  </section>
+    <section class="sec" aria-labelledby="pace-h">
+      <span class="num">02 · <span data-t="short.pace"></span></span>
+      <div class="body">
+        <div class="read">
+          <h2 id="pace-h" data-t="sections.pace"></h2>
+          <p id="pace-intro"></p>
+        </div>
+        <div class="chart"><svg id="pace" role="img"></svg><div class="legend" id="pace-legend"></div></div>
+      </div>
+    </section>
 
-  <section aria-labelledby="pace-h">
-    <div class="read">
-      <h2 id="pace-h" data-t="sections.pace"></h2>
-      <p id="pace-intro"></p>
-    </div>
-    <div class="chart"><svg id="pace" role="img"></svg><div class="legend" id="pace-legend"></div></div>
-  </section>
+    <section class="sec" aria-labelledby="charts-h">
+      <span class="num">03 · <span data-t="short.charts"></span></span>
+      <div class="body">
+        <div class="read">
+          <h2 id="charts-h" data-t="sections.charts"></h2>
+          <p id="charts-intro"></p>
+        </div>
+        <div class="chartgrid" id="charts"></div>
+      </div>
+    </section>
 
-  <section aria-labelledby="how-h">
-    <h2 id="how-h" data-t="sections.trust"></h2>
-    <div class="two" id="trust"></div>
-  </section>
+    <section class="sec" id="how" aria-labelledby="how-h">
+      <span class="num">04 · <span data-t="short.method"></span></span>
+      <div class="body">
+        <h2 id="how-h" data-t="sections.trust"></h2>
+        <ol class="steps" id="method-steps"></ol>
+        <div class="two" id="trust"></div>
+        <p><a class="pdf" id="method-pdf" href="metodika.pdf" data-t="method.pdf"></a></p>
+      </div>
+    </section>
 
-  <footer>
-    <span class="eyebrow" data-t="sections.sources"></span>
-    <ol id="sources"></ol>
-    <p id="about" data-t="footer.about"></p>
-    <p id="author" hidden></p>
-    <p data-t="footer.updated"></p>
-  </footer>
+    <footer>
+      <span class="eyebrow" data-t="sections.sources"></span>
+      <ol id="sources"></ol>
+      <p id="about" data-t="footer.about"></p>
+      <p id="author" hidden></p>
+      <p data-t="footer.updated"></p>
+    </footer>
+  </div>
 </div>
 
 <script src="map.js"></script>

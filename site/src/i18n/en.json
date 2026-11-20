@@ -5,7 +5,8 @@
     "district": "District",
     "language": "Language",
     "load_error": "Could not load the data. Check the connection and click again.",
-    "year": "Season"
+    "year": "Season",
+    "method": "How it is made"
   },
   "districts": {
     "tayynsha": "Tayynsha",
@@ -23,7 +24,7 @@
     "accounts": "Companies in the surveyed squares",
     "charts": "In numbers",
     "pace": "Harvest pace",
-    "trust": "What is solid here, and what is an estimate",
+    "trust": "How it is made, and what to trust",
     "sources": "Sources"
   },
   "map": {
@@ -43,20 +44,24 @@
     "thousand_ha": "k ha",
     "imagery_credit": "Image: Copernicus Sentinel-2, July 2026",
     "loading": "Loading…",
-    "plot_line": "Company plot from the cadastre"
+    "plot_line": "Company plot from the cadastre",
+    "fullscreen": "Full screen"
   },
   "panel": {
     "crop": "Crop",
     "harvest": "Harvest",
-    "holder": "Land user"
+    "holder": "Land user",
+    "history": "Field history",
+    "curve": "Field greenness through the season (NDVI)",
+    "nodata": "no data",
+    "cut": "harvest"
   },
   "legend": {
     "crop_title": "Crop group",
     "crop_hint": "Early crops ripen and dry by mid-August. Oilseeds (flax, sunflower, rapeseed) stay green into September or flower yellow.",
     "grain": "Cereals and pulses",
     "oilseed": "Oilseeds",
-    "other": "Grass, hay",
-    "none": "No crop seen",
+    "other": "Grass: hay and pasture",
     "time_title": "When the satellite saw the harvest",
     "time_hint": "The middle of the gap between the images before and after the cut. Grey: no lasting trace of a harvest in the images (often a harvest after rain).",
     "t1": "before 10 August",
@@ -65,7 +70,24 @@
     "t4": "1–10 September",
     "t5": "after 10 September",
     "t0": "no harvest trace",
-    "fallow": "Fallow (not sown this season)"
+    "fallow": "Fallow (not sown this season)",
+    "grass": "Grass: hay and pasture",
+    "short": {
+      "grain": "Cereals",
+      "oilseed": "Oilseeds",
+      "grass": "Grass",
+      "fallow": "Fallow",
+      "plot": "Cadastral plot",
+      "crops": "Crops"
+    },
+    "grass_note": "hay and pasture together",
+    "grass_use": {
+      "pasture": "Pasture near villages and farms",
+      "oldfield": "Old fields",
+      "steppe": "Steppe and pasture",
+      "oldfield_tip": "Former fields now under grass: hay or long unused",
+      "steppe_tip": "Steppe, meadows and pastures: from space a pasture cannot be told from unused steppe"
+    }
   },
   "harvest": {
     "dated": "Harvested between {from} and {to}",
@@ -103,14 +125,18 @@
     "grain": "Cereals",
     "oilseed": "Oilseeds",
     "avg": "Combines at the district average",
-    "modern": "Modern fleet",
     "whole": "Whole farm, open data (in Russian)",
     "group_mark": "group",
     "show_all": "Show all ({n})",
     "show_fewer": "Show fewer",
     "pair_note": "Some farms are registered as two companies with one name, an older and a newer one; their land is shown under the newer name, with the older one noted below it.",
     "members": "{n} companies",
-    "same_farm": "same farm as {names}"
+    "same_farm": "same farm as {names}",
+    "tax": "Taxes 2025, mln ₸",
+    "rev": "Revenue 2025, bn ₸ (estimate)",
+    "staff": "Staff",
+    "search": "Find a company",
+    "none": "Nothing found"
   },
   "charts": {
     "companies_title": "Largest companies by field area",
@@ -135,11 +161,60 @@
     "pace_unknown": "No cut date found",
     "rain": "rain",
     "pace_official": "official",
-    "companies_note_plain": "Area inside the surveyed squares, thousand ha."
+    "companies_note_plain": "Area inside the surveyed squares, thousand ha.",
+    "land_title": "Land inside the district, from the images",
+    "land_note": "Thousand ha. Grass is all land under grass outside fields. Old fields are former fields now under grass, used for hay or long unused. The rest is steppe, meadows and pastures shown together: from space a grazed pasture cannot be told from unused steppe.",
+    "grass_long": "Grass: hay and pasture",
+    "fodder": "Fodder crops (sown)"
   },
   "footer": {
     "about": "An independent study from open data: satellite images, the public cadastral map and published sources.",
     "author": "Author",
     "updated": "Updated: November 2026"
+  },
+  "method": {
+    "pdf": "Full method with charts (PDF, in Russian)",
+    "steps": [
+      [
+        "Images",
+        "Sentinel-2 every 2–5 days, May to October, 10 m pixels; clouds cut out."
+      ],
+      [
+        "Fields",
+        "Borders where the land lives differently through the season; straightened, small scraps joined."
+      ],
+      [
+        "Crops",
+        "From the shape of the greenness curve: cereals, oilseeds, fallow, grass."
+      ],
+      [
+        "Harvest",
+        "A sharp jump in short-wave infrared when standing crop turns to stubble."
+      ],
+      [
+        "Land users",
+        "The public cadastral map, read by hand, one point per block of fields."
+      ]
+    ]
+  },
+  "harvest_short": {
+    "cloud": "{span}, cloudy spell",
+    "nocrop": "no crop seen",
+    "none": "not found"
+  },
+  "short": {
+    "accounts": "Land users",
+    "pace": "Harvest",
+    "charts": "Breakdowns",
+    "method": "Method"
+  },
+  "company": {
+    "title": "Company",
+    "fields": "Fields",
+    "area": "Field area",
+    "grain": "Cereals",
+    "oil": "Oilseeds",
+    "cut": "Harvested, from the images",
+    "on_map": "The company's fields are highlighted on the map."
   }
 }

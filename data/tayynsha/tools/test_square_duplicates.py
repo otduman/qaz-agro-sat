@@ -47,6 +47,12 @@ def test_a_square_on_another_grid_is_resampled_onto_this_one():
     assert sd.onto(b, xb + 5000, yb, 32641, (40, 40), xa, ya, 32642)[5, 5] == 0   # B wholly east of A: nothing
 
 
+def test_squares_whose_boxes_almost_touch_are_still_compared():
+    # Esil 2026-11-16: E280N5720 and E300N5740 boxes are 840 m apart, but their field maps overlap
+    assert sd.near([280500, 5718500, 294300, 5739500], [295140, 5738500, 321500, 5759500])
+    assert not sd.near([0, 0, 1000, 1000], [5000, 0, 6000, 1000])
+
+
 if __name__ == '__main__':
     tests = [v for k, v in sorted(globals().items()) if k.startswith('test_')]
     for t in tests:

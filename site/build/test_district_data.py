@@ -42,14 +42,16 @@ def test_pairs_join_two_registrations_of_one_farm():
 
 
 def test_group_members_fold_into_one_row_with_a_list():
-    acc = [dict(name='ТОО «Альфа»', group=True, ha=300, grain=200, oil=100, avg=1.0, modern=[1.0, 2.0], whole=None, src=None, url=None, also=[]),
-           dict(name='ТОО «Бета»', group=False, ha=250, grain=250, oil=0, avg=2.0, modern=[2.0, 3.0], whole=None, src=None, url=None, also=[]),
-           dict(name='ТОО «Группа»', group=True, ha=100, grain=60, oil=40, avg=0.5, modern=[0.5, 0.5], whole='90 000 га', src='S', url='u', also=[])]
+    acc = [dict(name='ТОО «Альфа»', group=True, ha=300, grain=200, oil=100, avg=1.0, tax=10.0, rev=600.0, staff='21–50', whole=None, src=None, url=None, also=[]),
+           dict(name='ТОО «Бета»', group=False, ha=250, grain=250, oil=0, avg=2.0, tax=None, rev=None, staff=None, whole=None, src=None, url=None, also=[]),
+           dict(name='ТОО «Группа»', group=True, ha=100, grain=60, oil=40, avg=0.5, tax=None, rev=None, staff=None, whole='90 000 га', src='S', url='u', also=[])]
     out = district_data.group_accounts(acc, 'Группа')
     assert [a['name'] for a in out] == ['Группа', 'ТОО «Бета»']
     g = out[0]
     assert g['members_n'] == 2 and g['ha'] == 400 and g['grain'] == 260 and g['oil'] == 140 and g['avg'] == 1.5
-    assert g['modern'] == [1.5, 2.5] and g['whole'] == '90 000 га' and g['url'] == 'u'
+    assert g['tax'] == 10.0 and g['rev'] == 600.0 and g['staff'] is None   # sums of the members that have figures
+    assert g['whole'] == '90 000 га' and g['url'] == 'u'
+    assert 'modern' not in g   # owner 2026-11-17: no modern-fleet estimate
     assert [m['name'] for m in g['members']] == ['ТОО «Альфа»', 'ТОО «Группа»']
     assert g['members'][1]['whole'] is None         # the group's own figure moves up to the group row
 
@@ -99,6 +101,80 @@ def test_fallow_regions_are_taken_once_from_the_square_whose_core_holds_them():
     assert len(out[0]['p']) >= 6
     # a square still being processed (not in the district table yet) gives no fallow
     assert district_data.land_regions(d, '2026', geo.projector(lat0, lon0), 'fallow', only={'E520N5900'}) == []
+
+
+def test_grass_regions_carry_their_use_when_a_use_list_exists():
+    # grass by use 2026-11-19 (data/experiments/grass-use-2026-11-19/NOTE.md): pasture near villages and farms,
+    # old fields under grass, steppe; without the list a region has no use
+    import json, tempfile
+    d = tempfile.mkdtemp()
+    os.makedirs(f'{d}/E500N5900/fields-2026')
+    lon0, lat0 = geo.from_utm42(510000, 5910000)
+    sq = lambda lo, la: [[lo, la], [lo + 0.01, la], [lo + 0.01, la + 0.01], [lo, la]]
+    feats = [{'type': 'Feature', 'properties': {'id': i}, 'geometry': {'type': 'Polygon', 'coordinates': [sq(lon0, lat0)]}}
+             for i in ('2026-F0001', '2026-F0002')]
+    json.dump({'type': 'FeatureCollection', 'features': feats}, open(f'{d}/E500N5900/fields-2026/fields-2026.geojson', 'w'))
+    open(f'{d}/grass-2026.csv', 'w').write('square,region,land,area_ha\nE500N5900,1,other,60\nE500N5900,2,other,30\n')
+    proj = geo.projector(lat0, lon0)
+    assert all('u' not in r for r in district_data.grass_regions(d, '2026', proj))
+    open(f'{d}/grass-use-2026.csv', 'w').write('square,region,cls\nE500N5900,2,oldfield\n')
+    out = district_data.grass_regions(d, '2026', proj)
+    assert sorted((r['ha'], r['u']) for r in out) == [(30, 'oldfield'), (60, 'steppe')]   # unlisted: steppe
+
+
+def test_grass_regions_are_the_listed_ones_whatever_their_label():
+    # owner 2026-11-16: one group "grass: hay and pasture" (data/experiments/hay-2026-11-16/NOTE.md)
+    import json, tempfile
+    d = tempfile.mkdtemp()
+    os.makedirs(f'{d}/E500N5900/series-2026'); os.makedirs(f'{d}/E500N5900/fields-2026')
+    lon0, lat0 = geo.from_utm42(510000, 5910000)
+    open(f'{d}/squares.csv', 'w').write('square,min_e,min_n,max_e,max_n\nE500N5900,500500,5898500,521500,5919500\n')
+    open(f'{d}/E500N5900/series-2026/fields-2026.csv', 'w', encoding='utf-8').write(
+        'id,land,area_ha,centroid_lat,centroid_lon\n'
+        f'2026-F0001,other,60,{lat0},{lon0}\n2026-F0002,fallow,30,{lat0},{lon0}\n2026-F0003,other,90,{lat0},{lon0}\n')
+    sq = lambda lo, la: [[lo, la], [lo + 0.01, la], [lo + 0.01, la + 0.01], [lo, la]]
+    feats = [{'type': 'Feature', 'properties': {'id': i}, 'geometry': {'type': 'Polygon', 'coordinates': [sq(lon0, lat0)]}}
+             for i in ('2026-F0001', '2026-F0002', '2026-F0003')]
+    json.dump({'type': 'FeatureCollection', 'features': feats}, open(f'{d}/E500N5900/fields-2026/fields-2026.geojson', 'w'))
+    proj = geo.projector(lat0, lon0)
+    assert district_data.grass_regions(d, '2026', proj) == []          # no list: no grass
+    open(f'{d}/grass-2026.csv', 'w').write('square,region,land,area_ha\nE500N5900,1,other,60\nE500N5900,2,fallow,30\n')
+    out = district_data.grass_regions(d, '2026', proj)
+    assert sorted(r['ha'] for r in out) == [30, 60] and all(len(r['p']) >= 6 for r in out)
+    assert district_data.grass_regions(d, '2026', proj, only={'E520N5900'}) == []
+    # Tayynsha 2026-11-17: land outside fields comes from a separate outline file (data/experiments/grass-tayynsha-...)
+    other = [{'type': 'Feature', 'properties': {'id': '2026-F100007'},
+              'geometry': {'type': 'Polygon', 'coordinates': [sq(lon0 + 0.02, lat0)]}}]
+    json.dump({'type': 'FeatureCollection', 'features': other}, open(f'{d}/E500N5900/other-2026.geojson', 'w'))
+    open(f'{d}/grass-2026.csv', 'w').write('square,region,land,area_ha\nE500N5900,100007,other,75\n')
+    out = district_data.grass_regions(d, '2026', proj)
+    assert [r['ha'] for r in out] == [75] and len(out[0]['p']) >= 6
+    # 2026-11-18: grass that was a crop field the season before leaves the layer
+    # (data/experiments/grass-history-2026-11-18/NOTE.md)
+    open(f'{d}/grass-2026.csv', 'w').write('square,region,land,area_ha\nE500N5900,1,other,60\nE500N5900,2,fallow,30\n')
+    os.remove(f'{d}/E500N5900/other-2026.geojson')
+    open(f'{d}/grass-was-field-2026.csv', 'w').write('square,region,area_ha,share,season\nE500N5900,1,60,0.9,2025\n')
+    assert [r['ha'] for r in district_data.grass_regions(d, '2026', proj)] == [30]
+
+
+def test_fallow_made_crop_becomes_a_cereal_field_with_its_dates():
+    # Esil 2026-11-17: thin dry-land crops the map called fallow (data/experiments/esil-fallow-crop-2026-11-17)
+    import tempfile
+    d = tempfile.mkdtemp()
+    assert district_data.fallow_crops(d, '2026') == {}
+    open(f'{d}/fallow-crop-2026.csv', 'w').write('square,region,area_ha,status,cut_from,cut_to,cut_middle\n'
+                                                 'E1,7,120.4,dated,2026-08-10,2026-08-12,2026-08-11\n')
+    out = district_data.fallow_crops(d, '2026')
+    assert out == {('E1', '2026-F0007'): dict(ha=120, c='grain', s='dated', f='2026-08-10', t='2026-08-12', m='2026-08-11')}
+
+
+def test_a_field_drawn_inside_another_fields_outline_joins_it():
+    # Esil 2025 (2026-11-17): an 82 ha field sat in the gap between the pieces of a joined 739 ha field
+    big = dict(p=[0, 0, 10, 0, 10, 10, 0, 10], ha=700, c='grain', h='ТОО "Тест"', _k=('A', '1'))
+    inner = dict(p=[4, 4, 6, 4, 6, 6, 4, 6], ha=80, c='grain', h=None, _k=('A', '2'))
+    edge = dict(p=[9, 9, 12, 9, 12, 12, 9, 12], ha=60, c='grain', h=None, _k=('A', '3'))
+    out, alias = district_data.fold_inside([big, inner, edge])
+    assert [f['ha'] for f in out] == [780, 60] and alias == {('A', '2'): ('A', '1')}
 
 
 def test_strict_fields_drop_small_ones_and_move_no_crop_ones_to_fallow():
@@ -188,6 +264,89 @@ def test_joined_pieces_become_one_field_with_their_hectares_and_the_bigger_crop(
     assert alias == {('S', 'F1'): ('S', 'F2'), ('S', 'F3'): ('S', 'F2')}
 
 
+def test_grass_or_fallow_lying_inside_a_drawn_field_is_not_drawn():
+    # islands belong to the field around them (owner 2026-11-13; square-fields-2026-11-18 part J v3)
+    fields = [dict(p=[0, 0, 10, 0, 10, 10, 0, 10], ha=1000)]
+    patches = [dict(p=[4, 4, 6, 4, 6, 6, 4, 6], ha=4), dict(p=[20, 20, 22, 20, 22, 22], ha=2)]
+    assert district_data.outside_fields(patches, fields) == [patches[1]]
+
+
+def test_a_split_field_is_drawn_as_its_pieces_with_the_hectares_shared():
+    # squares first part S 2026-11-18 (data/experiments/square-fields-2026-11-18): one field cut in two along a line
+    # that shows on the photos; both pieces keep its crop, dates and holder
+    fields = [dict(p=[0, 0, 4, 0, 4, 4], ha=100, c='grain', h='ТОО "А"', k='company', s='dated', m='2026-08-20',
+                   _k=('S', 'F1')),
+              dict(p=[9, 9, 8, 8], ha=50, c='oilseed', h=None, k=None, s='dated', m='', _k=('S', 'F2'))]
+    splits = {('S', 'F1'): [dict(p=[0, 0, 2, 0, 2, 4], share=0.6), dict(p=[2, 0, 4, 0, 4, 4], share=0.4)]}
+    out = district_data.split_fields(fields, splits)
+    assert [f['ha'] for f in out] == [60, 40, 50]
+    assert [f['p'] for f in out[:2]] == [[0, 0, 2, 0, 2, 4], [2, 0, 4, 0, 4, 4]]
+    assert all(f['c'] == 'grain' and f['h'] == 'ТОО "А"' and f['_k'] == ('S', 'F1') for f in out[:2])
+
+
+def test_a_piece_split_along_a_seen_line_carries_its_own_crop_and_harvest_date():
+    # lines first 2026-11-19 (data/experiments/lines-first-2026-11-18): pieces read like any field (piece_facts)
+    fields = [dict(p=[0, 0, 4, 0, 4, 4], ha=100, c='grain', h='ТОО "А"', k='company', s='dated', f='2026-08-10',
+                   t='2026-08-12', m='2026-08-11', _k=('S', 'F1'))]
+    splits = {('S', 'F1'): [dict(p=[0, 0, 2, 0, 2, 4], share=0.5),
+                            dict(p=[2, 0, 4, 0, 4, 4], share=0.5, c='oilseed', s='dated', f='2026-09-20',
+                                 t='2026-09-22', m='2026-09-21')]}
+    a, b = district_data.split_fields(fields, splits)
+    assert a['c'] == 'grain' and a['m'] == '2026-08-11'
+    assert b['c'] == 'oilseed' and (b['s'], b['f'], b['t'], b['m']) == ('dated', '2026-09-20', '2026-09-22', '2026-09-21')
+    assert b['h'] == 'ТОО "А"' and b['ha'] == 50
+
+
+def test_split_files_are_read_with_every_piece_and_earlier_splits_win():
+    import json, tempfile
+    d = tempfile.mkdtemp()
+    lon0, lat0 = 70.0, 53.0
+    sq = lambda lo: [[lo, lat0], [lo + 0.01, lat0], [lo + 0.01, lat0 + 0.01], [lo, lat0]]
+    feat = lambda keep, piece, share, lo, **k: {'type': 'Feature', 'geometry': {'type': 'Polygon', 'coordinates': [sq(lo)]},
+                                               'properties': dict(square='S', keep=keep, piece=piece, share=share, **k)}
+    json.dump({'type': 'FeatureCollection', 'features': [feat('F1', 1, 0.5, lon0), feat('F1', 2, 0.5, lon0 + 0.01)]},
+              open(f'{d}/splits-2026.geojson', 'w'))
+    json.dump({'type': 'FeatureCollection', 'features': [
+        feat('F1', 1, 0.3, lon0, c='grain'), feat('F1', 2, 0.7, lon0 + 0.01, c='grain'),
+        feat('F2', 1, 0.4, lon0 + 0.02, c='grain', m='2026-08-01'),
+        feat('F2', 2, 0.6, lon0 + 0.03, c='oilseed', m='2026-09-01')]}, open(f'{d}/line-splits-2026.geojson', 'w'))
+    out = district_data.read_splits(d, '2026', geo.projector(lat0, lon0))
+    assert [q['share'] for q in out[('S', 'F1')]] == [0.5, 0.5]          # the earlier split wins
+    assert [q['c'] for q in out[('S', 'F2')]] == ['grain', 'oilseed'] and out[('S', 'F2')][1]['m'] == '2026-09-01'
+
+
+def test_a_small_field_whose_outline_is_a_seen_line_stays_on_the_map():
+    # evidence joins and small fields 2026-11-19 (data/experiments/lines-first-2026-11-18): under 50 ha is not dropped
+    # when it is a real small field (small-fields-YEAR.csv)
+    fields = [dict(p=[0, 0], ha=30, c='grain', _k=('S', 'F1')), dict(p=[0, 0], ha=30, c='grain', _k=('S', 'F2'))]
+    kept, _ = district_data.strict_fields(fields, [], keep_small={('S', 'F1')})
+    assert [f['_k'] for f in kept] == [('S', 'F1')]
+
+
+def test_simple_outlines_change_the_drawing_only():
+    # simple outlines v4 2026-11-19 (data/experiments/lines-first-2026-11-18): bays drawn in, hectares unchanged
+    fields = [dict(p=[0, 0, 1, 1], ha=100, c='grain', _k=('S', 'F1')),
+              dict(p=[2, 2, 3, 3], ha=40, c='grain', _k=('S', 'F2'), _piece=1),
+              dict(p=[4, 4, 5, 5], ha=60, c='oilseed', _k=('S', 'F2'), _piece=2)]
+    outlines = {('S', 'F1', 0): [9, 9, 9, 8], ('S', 'F2', 2): [7, 7, 7, 6]}
+    out = district_data.draw_simple(fields, outlines)
+    assert [f['p'] for f in out] == [[9, 9, 9, 8], [2, 2, 3, 3], [7, 7, 7, 6]]
+    assert [f['ha'] for f in out] == [100, 40, 60]
+
+
+def test_split_pieces_remember_their_piece_number():
+    fields = [dict(p=[0, 0], ha=100, c='grain', _k=('S', 'F1'))]
+    out = district_data.split_fields(fields, {('S', 'F1'): [dict(p=[1], share=0.5, piece=3), dict(p=[2], share=0.5, piece=4)]})
+    assert [f['_piece'] for f in out] == [3, 4]
+
+
+def test_a_one_piece_feature_gives_the_field_its_straightened_outline():
+    # squares first 2026-11-18 (data/experiments/square-fields-2026-11-18): the outline changes, hectares do not
+    keyed = [(('S', 'F1'), dict(p=[0, 0, 1, 1], ha=100, c='grain', h=None, k=None, s='dated', m='2026-08-20'))]
+    out, alias = district_data.join_fields(keyed, [dict(square='S', members=['F1'], keep='F1', p=[5, 5, 6, 6])])
+    assert out == [(('S', 'F1'), dict(keyed[0][1], p=[5, 5, 6, 6]))] and alias == {}
+
+
 def test_a_join_shares_the_one_known_holder_with_every_piece():
     joins = [dict(square='S', members=['F1', 'F2'], keep='F1', p=[]), dict(square='S', members=['F3', 'F4'], keep='F3', p=[])]
     owner = {('S', 'F2'): 'A', ('S', 'F3'): 'B', ('S', 'F4'): 'C'}
@@ -236,7 +395,7 @@ def test_tayynsha_build_privacy():
         return
     d = district_data.build('data/tayynsha', '2026', 'data/tayynsha/holders.csv', 'data/tayynsha/company-groups.csv',
                             'docs/districts/tayynsha.geojson', (69.764, 53.848), 701)
-    assert len(d["fields"]) == 2503, len(d["fields"])  # under 50 ha and no-crop fields left off, gaps filled, tails trimmed, small fields joined, hybrid outlines, straight borders, holders via shared borders, readability joins, duplicates dropped, joins v3, islands folded
+    assert len(d["fields"]) == 4037, len(d["fields"])  # E640N5960 dropped 2026-11-20 (owner: tidy only, 5% inside); crop seen v3 2026-11-20: a no-crop field found sown (+2 pieces); edge squares 2026-11-20: 13 more squares (47), fields beyond the border shown as on the other rectangles; lines first 2026-11-19: 415 fields split along seen lines into 934 pieces, 90 small fields (20-50 ha) kept, simple outlines; 23 fields split along inner corners (2026-11-18), under 50 ha and no-crop fields left off, gaps filled, tails trimmed, small fields joined, hybrid outlines, straight borders, holders via shared borders, readability joins, duplicates dropped, joins v3, islands folded
     assert all(f['h'] is None for f in d['fields'] if f['k'] in ('farm', 'private', 'lease', 'college'))
     assert d['totals']['group_ha'] > 0
     # 'known holder' leaves out land whose holder the map hides: group share as published (about 42%)
@@ -244,10 +403,20 @@ def test_tayynsha_build_privacy():
     assert t['known_ha'] < t['linked_ha'] and 0.40 < t['group_ha'] / t['known_ha'] < 0.44, t
     assert d['accounts'][0]['ha'] >= d['accounts'][-1]['ha']
     # company hectares come only from the fields shown (no left-off small or no-crop fields)
-    assert 400000 < sum(a['ha'] for a in d['accounts']) < 403000, sum(a['ha'] for a in d['accounts'])   # 406,928 with them
+    assert 400000 < sum(a["ha"] for a in d["accounts"]) < 405000, sum(a["ha"] for a in d["accounts"])   # 406,928 with them; 403,415 after the edge squares (fields at the old edge re-cut)
     assert all('_k' not in f for f in d['fields'])
     assert set(d['sizes']) <= {'group', 'company', 'farm', 'unread'}
     assert abs(sum(d['crop_ha'].values()) - d['totals']['ha']) < 50
+
+
+def test_registry_figures_read_taxes_revenue_and_staff_per_holder():
+    with tempfile.TemporaryDirectory() as tmp:
+        assert district_data.registry_figures(tmp) == {}
+        with open(os.path.join(tmp, 'company-registry.csv'), 'w', encoding='utf-8', newline='') as f:
+            f.write('holder,tax_2025,revenue_2025,staff,url\n"ТОО ""А""",354000000,21900000000,251–500,https://x\n"ТОО ""Б""",,,,\n')
+        got = district_data.registry_figures(tmp)
+        assert got['ТОО "А"'] == {'tax': 354.0, 'rev': 21.9, 'staff': '251–500', 'reg_url': 'https://x'}   # mln and bn tenge
+        assert got['ТОО "Б"'] == {'tax': None, 'rev': None, 'staff': None, 'reg_url': None}
 
 
 if __name__ == '__main__':

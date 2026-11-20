@@ -57,6 +57,18 @@ def public_figures(district_dir):
     return {r['holder']: r for r in csv.DictReader(open(p, encoding='utf-8'))}
 
 
+def registry_figures(district_dir):
+    """holder -> {tax: mln tenge paid in 2025, rev: bn tenge estimated revenue 2025, staff: employee band, reg_url}
+    from <district>/company-registry.csv (Statsnet figures; revenue there is an estimate from taxes), or {}."""
+    p = os.path.join(district_dir, 'company-registry.csv')
+    if not os.path.isfile(p):
+        return {}
+    num = lambda v, div: round(float(v) / div, 1) if v else None
+    return {r['holder']: dict(tax=num(r['tax_2025'], 1e6), rev=num(r['revenue_2025'], 1e9), staff=r['staff'] or None,
+                              reg_url=r['url'] or None)
+            for r in csv.DictReader(open(p, encoding='utf-8'))}
+
+
 def plot_outlines(paths, proj):
     """Company plot outlines from GeoJSON files ({holder} in properties) as [{p: flat ring on the page grid, name}]."""
     out = []
@@ -131,16 +143,25 @@ def idle_fallow(district_dir, year):
     return out
 
 
-def strict_fields(fields, fallow, min_ha=MIN_FIELD_HA):
+def strict_fields(fields, fallow, min_ha=MIN_FIELD_HA, keep_small=frozenset()):
     """(fields, fallow) after the stricter rule: a field where no crop was seen all season is shown as fallow; a field
-    under min_ha that no neighbour absorbed is left off (under 1% of the area)."""
+    under min_ha that no neighbour absorbed is left off (under 1% of the area), unless keep_small lists it (a real
+    small field: its outline is a seen line, evidence_joins.py, 2026-11-19)."""
     kept, fal = [], list(fallow)
     for f in fields:
         if f.get('c') == 'none':
             fal.append(dict(p=f['p'], ha=f['ha']))
-        elif f['ha'] >= min_ha:
+        elif f['ha'] >= min_ha or f.get('_k') in keep_small:
             kept.append(f)
     return kept, fal
+
+
+def small_fields(district_dir, year):
+    """(square, field id) of real small fields kept under the 50 ha mark (small-fields-YEAR.csv), or an empty set."""
+    p = f'{district_dir}/small-fields-{year}.csv'
+    if not os.path.isfile(p):
+        return frozenset()
+    return frozenset((r['square'], r['keep']) for r in csv.DictReader(open(p, encoding='utf-8')))
 
 
 def fold_islands(keyed, parents, year, alias=None):
@@ -173,6 +194,84 @@ def read_joins(district_dir, year, proj):
     return out
 
 
+def read_splits(district_dir, year, proj):
+    """(square, keep member) -> [{p, share}]: fields cut along a line that shows on the photos (field_splits.py,
+    data/experiments/square-fields-2026-11-18/NOTE.md part S). {} when there is no file."""
+    out = defaultdict(list)
+    # splits along inner corners, then (lines first, 2026-11-19) along lines seen on many photos, whose pieces carry
+    # their own crop group and harvest dates (data/experiments/lines-first-2026-11-18/NOTE.md)
+    earlier = set()
+    for name in (f'splits-{year}.geojson', f'line-splits-{year}.geojson'):
+        path = f'{district_dir}/{name}'
+        if not os.path.isfile(path):
+            continue
+        if name.startswith('line'):
+            earlier = set(out)                  # a field split along inner corners keeps that split
+        for f in json.load(open(path, encoding='utf-8'))['features']:
+            q = f['properties']
+            if (q['square'], q['keep']) in earlier:
+                continue
+            pts = geo.simplify([proj(lon, lat) for lon, lat in f['geometry']['coordinates'][0]], TOLERANCE_KM)
+            piece = dict(p=[round(v, 2) for pt in pts for v in pt], share=q['share'], piece=q.get('piece', 0))
+            piece.update({k: q[k] for k in ('c', 's', 'f', 't', 'm') if k in q})
+            out[(q['square'], q['keep'])].append(piece)
+    return dict(out)
+
+
+def outside_fields(patches, fields):
+    """Patches (grass, fallow) whose centre does not lie inside a drawn field: an island belongs to the field around
+    it (owner 2026-11-13; data/experiments/square-fields-2026-11-18 part J v3)."""
+    boxes = []
+    for f in fields:
+        xs, ys = f['p'][0::2], f['p'][1::2]
+        boxes.append((min(xs), min(ys), max(xs), max(ys), f['p']))
+    out = []
+    for g in patches:
+        n = len(g['p']) // 2
+        x, y = sum(g['p'][0::2]) / n, sum(g['p'][1::2]) / n
+        if not any(x0 <= x <= x1 and y0 <= y <= y1 and _inside(x, y, p) for x0, y0, x1, y1, p in boxes):
+            out.append(g)
+    return out
+
+
+def split_fields(fields, splits):
+    """Fields with a split drawn as its pieces: each piece the field's facts with its own outline and its share of
+    the hectares."""
+    out = []
+    for f in fields:
+        pieces = splits.get(f.get('_k'))
+        if not pieces:
+            out.append(f)
+            continue
+        out += [dict(f, p=q['p'], ha=round(f['ha'] * q['share']), _piece=q.get('piece', 0),
+                     **{k: q[k] for k in ('c', 's', 'f', 't', 'm') if k in q})
+                for q in pieces]
+    return out
+
+
+def read_outlines(district_dir, year, proj):
+    """(square, keep, piece) -> simplified outline (simple_outlines.py, 2026-11-19), or {} when there is no file."""
+    path = f'{district_dir}/outlines-{year}.geojson'
+    if not os.path.isfile(path):
+        return {}
+    out = {}
+    for f in json.load(open(path, encoding='utf-8'))['features']:
+        q = f['properties']
+        pts = geo.simplify([proj(lon, lat) for lon, lat in f['geometry']['coordinates'][0]], TOLERANCE_KM)
+        out[(q['square'], q['keep'], q['piece'])] = [round(v, 2) for pt in pts for v in pt]
+    return out
+
+
+def draw_simple(fields, outlines):
+    """Fields drawn with their simplified outline where there is one; nothing else changes."""
+    out = []
+    for f in fields:
+        k = f.get('_k')
+        p = outlines.get((k[0], k[1], f.get('_piece', 0))) if k else None
+        out.append(dict(f, p=p) if p else f)
+    return out
+
+
 def share_group_holders(owner, joins):
     """owner with every piece of a joined field given the field's holder, when its pieces name exactly one."""
     out = dict(owner)
@@ -193,6 +292,10 @@ def join_fields(keyed, joins):
     alias = {}
     for j in joins:
         keys = [(j['square'], m) for m in j['members'] if (j['square'], m) in index]
+        if len(keys) == 1 and len(j['members']) == 1:
+            # squares first 2026-11-18: one field drawn with its straightened outline (square_fields.py)
+            index[keys[0]] = dict(index[keys[0]], p=j['p'])
+            continue
         if len(keys) < 2:
             continue
         keep = (j['square'], j['keep'])
@@ -292,6 +395,98 @@ def land_regions(district_dir, year, proj, land, skip=frozenset(), only=None):
     return out
 
 
+def _inside(x, y, p):
+    """Point (x, y) inside the flat ring p (ray casting)."""
+    n, hit = len(p) // 2, False
+    for i in range(n):
+        x1, y1, x2, y2 = p[2 * i], p[2 * i + 1], p[2 * ((i + 1) % n)], p[2 * ((i + 1) % n) + 1]
+        if (y1 > y) != (y2 > y) and x < x1 + (y - y1) * (x2 - x1) / (y2 - y1):
+            hit = not hit
+    return hit
+
+
+def fold_inside(fields):
+    """A field whose outline lies wholly inside a bigger field's drawn outline (a joined field's outline can cover a gap
+    between its pieces) is not drawn on its own: its hectares join the bigger field. Returns (fields, alias: folded
+    field's _k -> the _k of the field it joined)."""
+    def box(f):
+        xs, ys = f['p'][0::2], f['p'][1::2]
+        return min(xs), min(ys), max(xs), max(ys)
+    order = sorted(range(len(fields)), key=lambda i: -fields[i]['ha'])
+    boxes = [box(f) for f in fields]
+    gone, alias = set(), {}
+    for a in order:
+        if a in gone:
+            continue
+        ax0, ay0, ax1, ay1 = boxes[a]
+        for b in order:
+            if b == a or b in gone or fields[b]['ha'] >= fields[a]['ha']:
+                continue
+            bx0, by0, bx1, by1 = boxes[b]
+            if bx0 < ax0 or by0 < ay0 or bx1 > ax1 or by1 > ay1:
+                continue
+            pb = fields[b]['p']
+            if all(_inside(pb[2 * i], pb[2 * i + 1], fields[a]['p']) for i in range(len(pb) // 2)):
+                fields[a]['ha'] += fields[b]['ha']
+                gone.add(b)
+                alias[fields[b].get('_k')] = fields[a].get('_k')
+    return [f for i, f in enumerate(fields) if i not in gone], alias
+
+
+def fallow_crops(district_dir, year):
+    """(square, region id) -> field facts for map-fallow regions that are thin dry-land crops (straw stubble after a
+    green summer; Esil 2026-11-17, blind check in data/experiments/esil-fallow-crop-2026-11-17/NOTE.md). {} if none."""
+    p = f'{district_dir}/fallow-crop-{year}.csv'
+    if not os.path.isfile(p):
+        return {}
+    return {(r['square'], f'{year}-F{int(r["region"]):04d}'): dict(
+        ha=round(float(r['area_ha'])), c='grain', s=r.get('status') or 'no cut found', f=r.get('cut_from', ''),
+        t=r.get('cut_to', ''), m=r.get('cut_middle', '')) for r in csv.DictReader(open(p, encoding='utf-8'))}
+
+
+def grass_regions(district_dir, year, proj, only=None):
+    """Regions listed in <district>/grass-<year>.csv (square, region number) as [{p, ha}]: "grass: hay and pasture",
+    owner 2026-11-16, rule and blind check in data/experiments/hay-2026-11-16/NOTE.md. [] when there is no list."""
+    p = f'{district_dir}/grass-{year}.csv'
+    if not os.path.isfile(p):
+        return []
+    # 2026-11-18: grass that was a crop field another season leaves the layer (grass_history.py,
+    # data/experiments/grass-history-2026-11-18/NOTE.md)
+    was = f'{district_dir}/grass-was-field-{year}.csv'
+    gone = {(r['square'], r['region']) for r in csv.DictReader(open(was, encoding='utf-8'))} if os.path.isfile(was) else set()
+    # 2026-11-19: grass by use (pasture near villages and farms / old field / steppe), when listed
+    # (data/experiments/grass-use-2026-11-19/NOTE.md)
+    up = f'{district_dir}/grass-use-{year}.csv'
+    use = {(r['square'], f'{year}-F{int(r["region"]):04d}'): r['cls']
+           for r in csv.DictReader(open(up, encoding='utf-8'))} if os.path.isfile(up) else {}
+    want = {}
+    for r in csv.DictReader(open(p, encoding='utf-8')):
+        if (r['square'], r['region']) in gone:
+            continue
+        if only is None or r['square'] in only:
+            want.setdefault(r['square'], {})[f'{year}-F{int(r["region"]):04d}'] = round(float(r['area_ha']))
+    out = []
+    for sq, ids in sorted(want.items()):
+        # Tayynsha 2026-11-17: its maps outline only fields, so land outside fields has its own outline file
+        # (data/experiments/grass-tayynsha-2026-11-17/NOTE.md)
+        shapes = f'{district_dir}/{sq}/other-{year}.geojson'
+        if not os.path.isfile(shapes):
+            shapes = f'{district_dir}/{sq}/fields-{year}/fields-{year}.geojson'
+        if not os.path.isfile(shapes):
+            continue
+        for f in json.load(open(shapes, encoding='utf-8'))['features']:
+            fid = f['properties']['id']
+            if fid in ids:
+                g = f['geometry']
+                ring = g['coordinates'][0] if g['type'] == 'Polygon' else max((q[0] for q in g['coordinates']), key=len)
+                pts = geo.simplify([proj(lon, lat) for lon, lat in ring], TOLERANCE_KM)
+                rec = dict(p=[round(v, 2) for q in pts for v in q], ha=ids[fid])
+                if use:
+                    rec['u'] = use.get((sq, fid), 'steppe')
+                out.append(rec)
+    return out
+
+
 def read_crops(district_dir, year, name='crops-{year}.csv'):
     """(square, field) -> crop group, from each square's crop file `name` ({year} filled in)."""
     crops = {}
@@ -326,6 +521,12 @@ def join_pairs(rows, pairs):
     return merged, {to: [name(h, 'company') for h in olds] for to, olds in joined.items()}
 
 
+def total(values):
+    """Sum of the values that are known, or None when none is."""
+    known = [v for v in values if v is not None]
+    return round(sum(known), 1) if known else None
+
+
 def group_accounts(accounts, group_name):
     """The group's member rows folded into one row named group_name, placed by size among the others. The group row
     sums area and combines and lists its members (largest first); a member whose name holds the group's own name gives
@@ -340,7 +541,7 @@ def group_accounts(accounts, group_name):
     g = dict(name=group_name, group=True, group_row=True, members_n=len(members), also=[],
              ha=sum(m['ha'] for m in members), grain=sum(m['grain'] for m in members), oil=sum(m['oil'] for m in members),
              avg=round(sum(m['avg'] for m in members), 1) if all(m['avg'] is not None for m in members) else None,
-             modern=[round(sum(m['modern'][0] for m in members), 1), round(sum(m['modern'][1] for m in members), 1)],
+             tax=total(m.get('tax') for m in members), rev=total(m.get('rev') for m in members), staff=None,
              whole=own['whole'] if own else None, src=own['src'] if own else None, url=own['url'] if own else None)
     if own:
         own = dict(own, whole=None, src=None, url=None)
@@ -385,6 +586,20 @@ def build(district_dir, year, holders_csv, groups_csv, boundary_geojson, town_lo
     twice, kept = duplicates_of(district_dir, year)
     land_table = [r for r in csv.DictReader(open(f'{district_dir}/district-harvest-{year}.csv', encoding='utf-8'))
                   if r['land'] == 'field' and (r['square'], r['field']) not in dark]
+    # map-fallow regions that are thin dry-land crops join the fields (Esil, fallow_crops)
+    made_crop = fallow_crops(district_dir, year)
+    if made_crop:
+        cent = {}
+        for sq in {k[0] for k in made_crop}:
+            t = f'{district_dir}/{sq}/series-{year}/fields-{year}.csv'
+            if os.path.isfile(t):
+                for x in csv.DictReader(open(t, encoding='utf-8')):
+                    cent[(sq, x['id'])] = (x['centroid_lat'], x['centroid_lon'])
+        for k, v in made_crop.items():
+            if k in cent and k not in dark:
+                land_table.append(dict(square=k[0], field=k[1], land='field', area_ha=str(v['ha']), status=v['s'],
+                                       cut_from=v['f'], cut_to=v['t'], cut_middle=v['m'], window_days='', rise='',
+                                       readings='', centroid_lat=cent[k][0], centroid_lon=cent[k][1], touches_edge=''))
     # holders were read on the field map of ref_year; another season's fields take them by overlap
     owner = holder_pace.district_owners(district_dir, int(ref_year or year), holders, int(year), land_table) if holders else {}
     dark |= twice   # neither water nor a second copy of a field is drawn
@@ -395,6 +610,7 @@ def build(district_dir, year, holders_csv, groups_csv, boundary_geojson, town_lo
         # a small region lying inside a linked field belongs to the same land user
         owner = inherit_from_parents(owner, parents, keys, year)
     crops = read_crops(district_dir, year, crops_name)
+    crops.update({k: 'short season' for k in made_crop})
 
     rings = _rings(boundary_geojson)
     lats = [p[1] for ring in rings for p in ring]
@@ -443,11 +659,19 @@ def build(district_dir, year, holders_csv, groups_csv, boundary_geojson, town_lo
     pieces = [k for k, _ in keyed]
     keyed, alias = join_fields(keyed, joins)
     fields = fold_islands(keyed, parents, year, alias)
-    shown, fallow = strict_fields(fields, land_regions(district_dir, year, proj, 'fallow', dark, only=set(want)))
+    fields, inner = fold_inside(fields)
+    if inner:   # pieces of a folded field now belong to the field it joined
+        alias = {**{k: inner.get(v, v) for k, v in alias.items()}, **inner}
+    shown, fallow = strict_fields(fields, land_regions(district_dir, year, proj, 'fallow', dark | set(made_crop), only=set(want)),
+                                  keep_small=small_fields(district_dir, year))
+    shown = split_fields(shown, read_splits(district_dir, year, proj))
+    shown = draw_simple(shown, read_outlines(district_dir, year, proj))
     left_off = {f['_k'] for f in fields} - {f['_k'] for f in shown}
     # pieces of a field the stricter rule left off (or showed as fallow) leave the company and pace figures too
     dropped = {k for k in pieces if alias.get(k, k) in left_off}
-    fields = [{a: b for a, b in f.items() if a != '_k'} for f in shown]
+    # q, i: the square and region the field was built from (its greenness curve is read by these)
+    fields = [{**{a: b for a, b in f.items() if a not in ('_k', '_piece')}, 'q': f['_k'][0],
+               'i': int(f['_k'][1].split('-F')[1])} for f in shown]
 
     squares = []
     for r in csv.DictReader(open(f'{district_dir}/squares.csv', encoding='utf-8')):
@@ -465,6 +689,7 @@ def build(district_dir, year, holders_csv, groups_csv, boundary_geojson, town_lo
         if h:
             rows.append((h, types.get(h, ''), crops.get((r['square'], r['field']), 'unclear'), float(r['area_ha'])))
     public = public_figures(district_dir)
+    registry = registry_figures(district_dir)
     present = {r[0] for r in rows}
     rows, also = join_pairs(rows, pairs)
     accounts = []
@@ -473,11 +698,12 @@ def build(district_dir, year, holders_csv, groups_csv, boundary_geojson, town_lo
             continue
         combine_ha = a['grain_ha'] + a['oilseed_ha']
         pub = public.get(a['holder']) or next((public[h] for h, to in pairs.items() if to == a['holder'] and h in public), {})
+        reg = registry.get(a['holder']) or next((registry[h] for h, to in pairs.items() if to == a['holder'] and h in registry), {})
         accounts.append(dict(name=name(a['holder'], a['type']), also=also.get(a['holder'], []),
                              group=a['holder'] in in_group, ha=a['field_ha'],
                              grain=a['grain_ha'], oil=a['oilseed_ha'],
                              avg=round(combine_ha / ha_per_combine, 1) if ha_per_combine else None,
-                             modern=[round(combine_ha / 2000, 1), round(combine_ha / 1600, 1)],
+                             tax=reg.get('tax'), rev=reg.get('rev'), staff=reg.get('staff'), reg_url=reg.get('reg_url'),
                              whole=pub.get('whole_farm') or None, src=pub.get('source') or None,
                              url=pub.get('url') or None))
 
@@ -496,7 +722,8 @@ def build(district_dir, year, holders_csv, groups_csv, boundary_geojson, town_lo
         s['ha'] += f['ha']
 
     return dict(
-        year=str(year), fields=fields, fallow=fallow, squares=squares, outline=outline, plots=plot_outlines(plots, proj), town=list(proj(*town_lonlat)), origin=[lat0, lon0],
+        year=str(year), fields=fields, fallow=outside_fields(fallow, fields),
+        grass=outside_fields(grass_regions(district_dir, year, proj, only=set(want)), fields), squares=squares, outline=outline, plots=plot_outlines(plots, proj), town=list(proj(*town_lonlat)), origin=[lat0, lon0],
         accounts=accounts, pace=pace(grain_rows, year),
         crop_ha={c: round(crop_ha.get(c, 0)) for c in ('grain', 'oilseed', 'other', 'none')}, sizes=sizes,
         totals=dict(fields=len(fields), ha=round(sum(x['ha'] for x in fields)),
