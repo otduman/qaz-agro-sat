@@ -323,6 +323,103 @@ def test_company_search_filters_the_table_and_a_company_shows_its_fields(page, b
     assert 'Ничего не найдено' in page.text_content('#acc tbody')
 
 
+def test_the_company_search_field_follows_the_theme_and_the_sites_square_controls(page, base):
+    # owner 2026-11-22: "search bar looks visually off" (it stayed white in dark mode, rounded beside square buttons,
+    # and its label squeezed it on a phone)
+    page.set_viewport_size({'width': 390, 'height': 800})
+    page.emulate_media(color_scheme='dark')
+    page.goto(base + '#ru/tayynsha')
+    settled(page)
+    s = page.evaluate("""(() => { const i = document.getElementById('acc-search'), cs = getComputedStyle(i),
+        root = getComputedStyle(document.documentElement), r = i.getBoundingClientRect(),
+        l = document.querySelector('label[for=acc-search]').getBoundingClientRect();
+        const probe = document.createElement('div'); probe.style.background = root.getPropertyValue('--surface');
+        document.body.appendChild(probe); const surface = getComputedStyle(probe).backgroundColor; probe.remove();
+        return {bg: cs.backgroundColor, surface, radius: cs.borderTopLeftRadius, h: r.height, w: r.width,
+                font: parseFloat(cs.fontSize), labelAbove: l.bottom <= r.top + 1}; })()""")
+    assert s['bg'] == s['surface'], s
+    assert s['radius'] == '0px' and s['h'] >= 40 and s['font'] >= 16 and s['labelAbove'] and s['w'] >= 300, s
+    page.focus('#acc-search')
+    assert page.evaluate("getComputedStyle(document.getElementById('acc-search')).outlineStyle") != 'none'
+
+
+def _vb(page):
+    return [float(v) for v in page.get_attribute('#map', 'viewBox').split()]
+
+
+def test_the_mouse_wheel_scrolls_the_page_past_the_map_and_ctrl_wheel_zooms_it(page, base):
+    # owner 2026-11-22: "hard to scroll past map but not touching it"; maps inside a page let the page scroll and zoom
+    # on Ctrl/Cmd + wheel (or a trackpad pinch, which arrives as Ctrl + wheel)
+    page.goto(base + '#ru/tayynsha')
+    settled(page)
+    page.locator('#map').scroll_into_view_if_needed()
+    box = page.locator('#map').bounding_box()
+    page.mouse.move(box['x'] + box['width'] / 2, box['y'] + box['height'] / 2)
+    before, y0 = _vb(page), page.evaluate('scrollY')
+    page.mouse.wheel(0, 400)
+    page.wait_for_timeout(400)
+    assert page.evaluate('scrollY') > y0 and _vb(page) == before
+    assert page.locator('.maphint.show').count() == 1
+    box = page.locator('#map').bounding_box()       # the page moved under the mouse
+    page.mouse.move(box['x'] + box['width'] / 2, max(box['y'], 0) + 60)
+    page.keyboard.down('Control')
+    page.mouse.wheel(0, -200)
+    page.keyboard.up('Control')
+    page.wait_for_timeout(400)
+    assert _vb(page)[2] < before[2]
+
+
+def test_one_finger_scrolls_the_page_and_two_fingers_move_the_map(page, base):
+    page.goto(base + '#ru/tayynsha')
+    settled(page)
+    assert page.evaluate("getComputedStyle(document.getElementById('map')).touchAction") == 'pan-x pan-y'
+    before = _vb(page)
+    page.evaluate("""(() => { const m = document.getElementById('map'), r = m.getBoundingClientRect();
+        const t = (id, x, y) => new Touch({identifier: id, target: m, clientX: r.left + x, clientY: r.top + y});
+        const fire = (type, ts) => m.dispatchEvent(new TouchEvent(type, {touches: ts, targetTouches: ts,
+            changedTouches: ts, bubbles: true, cancelable: true}));
+        fire('touchstart', [t(1, 200, 200)]); fire('touchmove', [t(1, 200, 120)]); fire('touchend', []); })()""")
+    page.wait_for_timeout(100)
+    assert _vb(page) == before and page.locator('.maphint.show').count() == 1
+    page.evaluate("""(() => { const m = document.getElementById('map'), r = m.getBoundingClientRect();
+        const t = (id, x, y) => new Touch({identifier: id, target: m, clientX: r.left + x, clientY: r.top + y});
+        const fire = (type, ts) => m.dispatchEvent(new TouchEvent(type, {touches: ts, targetTouches: ts,
+            changedTouches: ts, bubbles: true, cancelable: true}));
+        fire('touchstart', [t(1, 200, 200), t(2, 300, 200)]);
+        fire('touchmove', [t(1, 150, 250), t(2, 350, 250)]);      // apart and down: zoom in and move
+        fire('touchend', []); })()""")
+    page.wait_for_timeout(300)
+    after = _vb(page)
+    assert after[2] < before[2] and after != before
+
+
+def test_a_drag_moves_a_snapshot_of_the_map_and_redraws_once_on_release(page, base):
+    # owner 2026-11-22: "the map element is very laggy": the viewBox (which re-draws every field) changes once per
+    # gesture, the picture is only moved by the browser while the finger or mouse moves
+    page.goto(base + '#ru/tayynsha')
+    settled(page)
+    box = page.locator('#map').bounding_box()
+    cx, cy = box['x'] + box['width'] / 2, box['y'] + box['height'] / 2
+    before = _vb(page)
+    page.mouse.move(cx, cy)
+    page.mouse.down()
+    page.mouse.move(cx + 60, cy + 30, steps=6)
+    page.wait_for_timeout(100)
+    assert _vb(page) == before
+    assert 'translate' in page.evaluate("document.getElementById('map').style.transform")
+    page.mouse.up()
+    page.wait_for_timeout(100)
+    assert _vb(page) != before and page.evaluate("document.getElementById('map').style.transform") in ('', 'none')
+
+
+def test_the_pace_chart_shows_daily_rain_bars_with_their_key(page, base):
+    # owner 2026-11-21: rain per day under the harvest line (ERA5-Land district mean)
+    page.goto(base + '#ru/tayynsha')
+    settled(page)
+    assert page.locator('#pace rect.rain').count() > 10
+    assert 'Дождь' in page.text_content('#pace-legend')
+
+
 if __name__ == '__main__':
     try:
         from playwright.sync_api import sync_playwright

@@ -22,8 +22,11 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 def clean(name):
     name = re.sub(r'\s+', ' ', name.strip())
     name = re.sub(r'(?i)товарищество с ограниченной ответственностью', 'ТОО', name)
+    name = re.sub(r'(?i)^производственный кооператив', 'ПК', name)
     name = re.sub(r'^ТОО "ТОО ', 'ТОО "', name)
+    name = re.sub(r'^([^\s"]+)"', r'\1 "', name)           # 'ТОО"Тест"' -> 'ТОО "Тест"'
     name = re.sub(r'(^|\s)"\s+', r'\1"', name, count=1)    # only after an opening quote
+    name = re.sub(r'^(\S+ )""(.*)""$', r'\1"\2"', name)    # 'ТОО ""Тест""' -> 'ТОО "Тест"'
     return name
 
 

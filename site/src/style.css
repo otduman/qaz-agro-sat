@@ -28,6 +28,7 @@
   --t1: #86b6ef; --t2: #5598e7; --t3: #2a78d6; --t4: #1c5cab; --t5: #104281;
   --sel: #1a1d19;
   --chip: #ebe8df;
+  --rain: #86b6ef;
   --plot: #c2185b;
   --fallow: #9c6b3c; --fallow-line: #5e3a17;
   --pane: rgb(246 244 238 / 0.96);
@@ -40,7 +41,7 @@
     --bg: #141613; --surface: #1b1e1a; --ink: #e8e6df; --muted: #a3a69c; --rule: #33372f; --line: #e8e6df; --accent: #7fc4a6; --grass: #7f9c62; --grass-old: #b09a4c; --grass-steppe: #8f9a84;
     --survey: #22251f; --unread: #3b4239; --nochange: #5c6459;
     --grain: #d79a1a; --oil: #4b93e6; --other: #7f9c62; --group: #e07a45; --company: #4b93e6; --farm: #2bbf88;
-    --t1: #184f95; --t2: #256abf; --t3: #3987e5; --t4: #6da7ec; --t5: #9ec5f4; --sel: #ffffff; --chip: #262a24; --plot: #f06292; --fallow: #b98552; --fallow-line: #e2b07a;
+    --t1: #184f95; --t2: #256abf; --t3: #3987e5; --t4: #6da7ec; --t5: #9ec5f4; --sel: #ffffff; --chip: #262a24; --rain: #256abf; --plot: #f06292; --fallow: #b98552; --fallow-line: #e2b07a;
     --pane: rgb(20 22 19 / 0.94);
     color-scheme: dark;
   }
@@ -49,7 +50,7 @@
   --bg: #141613; --surface: #1b1e1a; --ink: #e8e6df; --muted: #a3a69c; --rule: #33372f; --line: #e8e6df; --accent: #7fc4a6; --grass: #7f9c62; --grass-old: #b09a4c; --grass-steppe: #8f9a84;
   --survey: #22251f; --unread: #3b4239; --nochange: #5c6459;
   --grain: #d79a1a; --oil: #4b93e6; --other: #7f9c62; --group: #e07a45; --company: #4b93e6; --farm: #2bbf88;
-  --t1: #184f95; --t2: #256abf; --t3: #3987e5; --t4: #6da7ec; --t5: #9ec5f4; --sel: #ffffff; --chip: #262a24; --plot: #f06292; --fallow: #b98552; --fallow-line: #e2b07a;
+  --t1: #184f95; --t2: #256abf; --t3: #3987e5; --t4: #6da7ec; --t5: #9ec5f4; --sel: #ffffff; --chip: #262a24; --rain: #256abf; --plot: #f06292; --fallow: #b98552; --fallow-line: #e2b07a;
   --pane: rgb(20 22 19 / 0.94);
   color-scheme: dark;
 }
@@ -120,7 +121,14 @@ a:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px soli
 
 /* the map: full width, controls laid over it */
 .mapsec { border-top: 1px solid var(--line); }
-.mapbox { position: relative; background: var(--survey); overflow: hidden; touch-action: none; }
+.mapbox { position: relative; background: var(--survey); overflow: hidden; }
+/* one finger scrolls the page, two move the map (map.js reads them); the picture is moved by the browser while a
+   gesture runs (owner 2026-11-22: laggy, hard to scroll past on phones) */
+.mapbox svg#map { touch-action: pan-x pan-y; transform-origin: 0 0; }
+.maphint { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; z-index: 3; pointer-events: none;
+  font: 600 17px/1.4 var(--font-body); text-align: center; color: #fff; background: rgba(12, 14, 12, 0.55); opacity: 0; }
+.maphint.show { opacity: 1; }
+@media (prefers-reduced-motion: no-preference) { .maphint { transition: opacity 200ms; } }
 .mapbox svg#map { display: block; width: 100%; height: clamp(480px, 78vh, 820px); cursor: grab; user-select: none; }
 .mapbox svg.drag { cursor: grabbing; }
 .mapbox:fullscreen { background: var(--bg); }
@@ -208,8 +216,21 @@ a:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px soli
 #panel svg.curve .grid { stroke: var(--rule, #ccc); stroke-width: 0.5; }
 #panel svg.curve .cut { stroke: var(--ink); stroke-width: 1; stroke-dasharray: 3 2; }
 #panel .company dd { white-space: normal; }
-.accsearch { display: flex; gap: 8px; align-items: center; margin: 0 0 8px; }
-.accsearch input { font: inherit; padding: 6px 10px; border: 1px solid var(--rule, #ccc); border-radius: 6px; min-width: 0; flex: 1; max-width: 340px; background: var(--paper, #fff); color: inherit; }
+/* company search: label above (as the key headings), a square field like the site's other controls, theme surface,
+   16px text (no zoom on phones), a search glyph inside, the accent ring on focus (owner 2026-11-22) */
+.accsearch { display: grid; gap: 6px; margin: 0 0 14px; max-width: 360px; }
+.accsearch label { font: 500 11px/1.4 var(--font-body); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+.accsearch .field { position: relative; display: flex; align-items: center; }
+.accsearch .field svg { position: absolute; left: 12px; width: 16px; height: 16px; color: var(--muted); pointer-events: none; }
+.accsearch input { -webkit-appearance: none; appearance: none; box-sizing: border-box; width: 100%; height: 42px; margin: 0;
+  padding: 0 12px 0 38px; font: 400 16px/1.2 var(--font-body); color: var(--ink); background: var(--surface);
+  border: 1px solid var(--line); border-radius: 0; transition: box-shadow 120ms, border-color 120ms; }
+.accsearch input::placeholder { color: var(--muted); opacity: 1; }
+.accsearch input:hover { box-shadow: inset 0 0 0 1px var(--line); }
+.accsearch input:focus { outline: none; }
+.accsearch input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.accsearch input::-webkit-search-cancel-button { cursor: pointer; }
+@media (prefers-reduced-motion: reduce) { .accsearch input { transition: none; } }
 #acc button.cname { font: inherit; color: inherit; background: none; border: 0; padding: 0; text-align: left; cursor: pointer; text-decoration: underline; text-decoration-color: var(--rule, #ccc); text-underline-offset: 3px; }
 #acc button.cname:hover, #acc button.cname:focus-visible { text-decoration-color: currentColor; }
 .sat .f.on { stroke: #fff; fill-opacity: 0.32; }

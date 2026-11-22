@@ -109,6 +109,16 @@ const Charts = (() => {
     if (rain) {
       h += `<rect x="${X(rain[0])}" y="${T}" width="${X(rain[1]) - X(rain[0])}" height="${H - T - B}" fill="var(--chip)"/><text class="ax" x="${(X(rain[0]) + X(rain[1])) / 2}" y="${T + 14}" text-anchor="middle">${esc(ui.charts.rain)}</text>`;
     }
+    // Daily district rain (ERA5-Land mean over the district, owner 2026-11-21) as bars rising from the bottom axis,
+    // capped at RAIN_MM a day (the tooltip keeps the real figure).
+    const days = (D.rain || []).filter(([d, mm]) => d >= yr + '-07-25' && d <= yr + '-10-31' && mm >= 0.5);
+    if (days.length) {
+      const RAIN_MM = 20, top = (H - T - B) * 0.22, step = X(yr + '-07-26') - X(yr + '-07-25');
+      days.forEach(([d, mm]) => {
+        const hh = Math.max(1.5, Math.min(mm, RAIN_MM) / RAIN_MM * top), [, m, dd] = d.split('-').map(Number);
+        h += `<rect class="rain" x="${(X(d) + 0.5).toFixed(1)}" y="${(Y(0) - hh).toFixed(1)}" width="${Math.max(1, step - 1).toFixed(1)}" height="${hh.toFixed(1)}" fill="var(--rain)"><title>${dd} ${ui.months[m - 1]}: ${mm} ${esc(ui.charts.rain_mm)}</title></rect>`;
+      });
+    }
     const hasGroup = D.sizes.group && D.sizes.group.fields > 0;
     const series = hasGroup
       ? [['all', 'var(--ink)', ui.charts.pace_all, 2.5], ['group', 'var(--group)', ui.charts.pace_group, 2], ['other', 'var(--company)', ui.charts.pace_other, 2]]
@@ -141,6 +151,7 @@ const Charts = (() => {
     svg.setAttribute('aria-label', ui.charts.pace_aria);
     const items = series.length > 1 || narrow ? ends.map(e => [e.col, `${e.lab} ${e.pct}%`]) : [];
     if (unknown > 0.005) items.push(['repeating-linear-gradient(45deg, var(--muted) 0 2px, transparent 2px 5px)', `${ui.charts.pace_unknown} ${Math.round(unknown * 100)}%`, 1]);
+    if (days.length) items.push(['var(--rain)', ui.charts.rain_daily, 1]);
     document.getElementById('pace-legend').innerHTML = legendHTML(items);
   }
 

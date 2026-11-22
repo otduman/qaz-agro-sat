@@ -572,6 +572,8 @@ def build(district_dir, year, holders_csv, groups_csv, boundary_geojson, town_lo
           crops_name='crops-{year}.csv', plots=None, holders_read=True, ref_year=None):
     import holder_pace
     import market
+    import piece_joins
+    import seam_overlaps
 
     holders, types = {}, {}
     if holders_csv and os.path.isfile(holders_csv):
@@ -652,7 +654,7 @@ def build(district_dir, year, holders_csv, groups_csv, boundary_geojson, town_lo
         keyed.append((k, dict(p=shapes[k], ha=round(float(r['area_ha'])), c=GROUP.get(crops.get(k, 'unclear'), 'none'),
                            s=r['status'], f=r['cut_from'], t=r['cut_to'], m=r['cut_middle'],
                            h=name(h, types.get(h, '')) if h else None, k=kind_of(h) if h else None,
-                           r=1 if r['square'] in read else 0)))
+                           r=1 if r['square'] in read else 0, _o=h)))
     # islands (a region almost wholly inside a field) are shown as part of that field
     for k, f in keyed:
         f['_k'] = k                           # each shown field remembers the piece it was built from
@@ -666,11 +668,20 @@ def build(district_dir, year, holders_csv, groups_csv, boundary_geojson, town_lo
                                   keep_small=small_fields(district_dir, year))
     shown = split_fields(shown, read_splits(district_dir, year, proj))
     shown = draw_simple(shown, read_outlines(district_dir, year, proj))
-    left_off = {f['_k'] for f in fields} - {f['_k'] for f in shown}
+    # a field drawn by two overlapping squares: copies dropped, slivers cut (seam_overlaps.py, 2026-11-22)
+    cores = {}
+    for r in csv.DictReader(open(f'{district_dir}/squares.csv', encoding='utf-8')):
+        e0, n0, e1, n1 = (float(r[x]) for x in ('min_e', 'min_n', 'max_e', 'max_n'))
+        ring = geo.utm_box(proj, e0 + 500, n0 + 500, e1 - 500, n1 - 500)
+        cores[r['square']] = seam_overlaps.poly(ring)
+    shown, copies = seam_overlaps.resolve(shown, cores)
+    # pieces of one real field whose border no photo shows as a line join (piece_joins.py, J v1, 2026-11-22)
+    shown, merged = piece_joins.join(shown, piece_joins.count_reader(district_dir, year, geo.unprojector(lat0, lon0)))
+    left_off = {f['_k'] for f in fields} - {f['_k'] for f in shown} - set(merged) - set(copies)
     # pieces of a field the stricter rule left off (or showed as fallow) leave the company and pace figures too
     dropped = {k for k in pieces if alias.get(k, k) in left_off}
     # q, i: the square and region the field was built from (its greenness curve is read by these)
-    fields = [{**{a: b for a, b in f.items() if a not in ('_k', '_piece')}, 'q': f['_k'][0],
+    fields = [{**{a: b for a, b in f.items() if a not in ('_k', '_piece', '_o')}, 'q': f['_k'][0],
                'i': int(f['_k'][1].split('-F')[1])} for f in shown]
 
     squares = []

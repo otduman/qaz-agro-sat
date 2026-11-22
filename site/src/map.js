@@ -8,7 +8,7 @@ const FieldMap = (() => {
 
   const mk = (tag, attrs) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); return e; };
   const pathOf = p => { let d = 'M' + p[0] + ' ' + p[1]; for (let i = 2; i < p.length; i += 2) d += 'L' + p[i] + ' ' + p[i + 1]; return d + 'Z'; };
-  const ratio = () => { const r = svg.getBoundingClientRect(); return r.width && r.height ? r.width / r.height : 1.6; };
+  const ratio = () => { const w = svg.clientWidth, h = svg.clientHeight; return w && h ? w / h : 1.6; };
 
   function timeClass(f) {
     if (!f.m) return 't-0';
@@ -26,7 +26,7 @@ const FieldMap = (() => {
   let insets = { left: 0, right: 0 };
   function fit() {
     const pad = 2, w = ext.x1 - ext.x0 + 2 * pad, h = ext.y1 - ext.y0 + 2 * pad, x = ext.x0 - pad, y = ext.y0 - pad;
-    const r = svg.getBoundingClientRect(), W = r.width || 1, H = r.height || 1;
+    const W = svg.clientWidth || 1, H = svg.clientHeight || 1;
     // cover, not contain: the district fills the whole map box and its far edges are panned to (owner 2026-11-17);
     // the view is centred on the free middle between the panes
     const want = W / H;
@@ -47,15 +47,17 @@ const FieldMap = (() => {
   }
 
   function setVB() {
+    if (frame) { cancelAnimationFrame(frame); frame = 0; }
+    svg.style.transform = ''; svg.style.willChange = '';
     svg.setAttribute('viewBox', `${vb.x} ${vb.y} ${vb.w} ${vb.h}`);
-    const r = svg.getBoundingClientRect(); const kmPerPx = vb.w / (r.width || 1);
+    shown = { ...vb };
+    const kmPerPx = vb.w / (svg.clientWidth || 1);
     if (townLabel) {
       townLabel.setAttribute('font-size', 13 * kmPerPx);
       townLabel.setAttribute('x', D.town[0] + 8 * kmPerPx); townLabel.setAttribute('y', D.town[1] + 4 * kmPerPx);
       townDot.setAttribute('r', 4 * kmPerPx);
     }
-    const nice = [1, 2, 5, 10, 20, 50]; const km = nice.find(n => n / kmPerPx >= 60) || 50;
-    scaleEl.innerHTML = `<span style="display:inline-block;width:${Math.round(km / kmPerPx)}px;border-top:2px solid currentColor;vertical-align:middle;margin-right:6px"></span>${km} ${ui ? ui.map.km : 'km'}`;
+    scaleBar();
     loadTiles();
   }
 
@@ -120,36 +122,104 @@ const FieldMap = (() => {
     vb = fit(); setVB(); paint();
   }
 
-  // Pan and zoom on the viewBox.
-  const pts = new Map(); let moved = 0, last = null, pinch = null;
-  function toMap(cx, cy) { const r = svg.getBoundingClientRect(); return { x: vb.x + (cx - r.left) / r.width * vb.w, y: vb.y + (cy - r.top) / r.height * vb.h }; }
-  function zoomAt(k, cx, cy) {
+  // Pan and zoom (owner 2026-11-22: "very laggy", "hard to scroll past the map on phones"). While a gesture runs
+  // the drawn map is only moved and scaled by the browser (a CSS transform of the SVG box, no re-draw); the viewBox,
+  // which re-draws every field, is set once when the gesture ends. One finger and the plain wheel scroll the page
+  // (a hint says how to move the map); two fingers, a mouse drag, Ctrl/Cmd + wheel (a trackpad pinch) and the
+  // buttons move it. In full screen the plain wheel zooms.
+  const pts = new Map(); let moved = 0, last = null, rect = null, frame = 0, settle = 0, busy = false;
+  let shown = null, two = null, one = null, hintEl = null, hintTimer = 0;
+  function measure() {
+    const b = svg.parentNode.getBoundingClientRect();
+    return { left: b.left, top: b.top, width: svg.clientWidth || 1, height: svg.clientHeight || 1 };
+  }
+  function toMap(cx, cy) { const r = rect || measure(); return { x: vb.x + (cx - r.left) / r.width * vb.w, y: vb.y + (cy - r.top) / r.height * vb.h }; }
+  function scaleBar() {
+    const kmPerPx = vb.w / (svg.clientWidth || 1);
+    const nice = [1, 2, 5, 10, 20, 50]; const km = nice.find(n => n / kmPerPx >= 60) || 50;
+    scaleEl.innerHTML = `<span style="display:inline-block;width:${Math.round(km / kmPerPx)}px;border-top:2px solid currentColor;vertical-align:middle;margin-right:6px"></span>${km} ${ui ? ui.map.km : 'km'}`;
+  }
+  function draw() {
+    if (frame) return;
+    frame = requestAnimationFrame(() => {
+      frame = 0;
+      if (!shown || !vb) return;
+      const W = svg.clientWidth || 1, H = svg.clientHeight || 1, s = shown.w / vb.w;
+      const tx = (shown.x - vb.x) / vb.w * W, ty = (shown.y - vb.y) / vb.h * H;
+      svg.style.transform = `translate(${tx}px, ${ty}px) scale(${s})`;
+      scaleBar();
+    });
+  }
+  function begin() { if (!busy) { busy = true; rect = measure(); svg.style.willChange = 'transform'; } }
+  function end() { busy = false; rect = null; setVB(); }
+  function zoomAt(k, cx, cy, live) {
     if (!vb) return;
     const nw = Math.min((ext.x1 - ext.x0) * 2.5, Math.max(1.5, vb.w / k)); const kk = vb.w / nw;
     const p = cx == null ? { x: vb.x + vb.w / 2, y: vb.y + vb.h / 2 } : toMap(cx, cy);
-    vb = { x: p.x - (p.x - vb.x) / kk, y: p.y - (p.y - vb.y) / kk, w: nw, h: nw / ratio() }; setVB();
+    vb = { x: p.x - (p.x - vb.x) / kk, y: p.y - (p.y - vb.y) / kk, w: nw, h: nw / ratio() };
+    if (live) draw(); else setVB();
   }
+  function hint(kind) {
+    if (!hintEl || !ui) return;
+    const mac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+    hintEl.textContent = kind === 'touch' ? ui.map.two_fingers : ui.map.ctrl_zoom.replace('{key}', mac ? '⌘' : 'Ctrl');
+    hintEl.classList.add('show');
+    clearTimeout(hintTimer); hintTimer = setTimeout(() => hintEl.classList.remove('show'), 1600);
+  }
+  const mid = ts => { const a = ts[0], b = ts[1]; return { x: (a.clientX + b.clientX) / 2, y: (a.clientY + b.clientY) / 2, d: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY) || 1 }; };
 
   function init(svgEl, scaleElement, pick) {
     svg = svgEl; scaleEl = scaleElement; onPick = pick;
-    svg.addEventListener('wheel', e => { e.preventDefault(); zoomAt(e.deltaY < 0 ? 1.25 : 0.8, e.clientX, e.clientY); }, { passive: false });
-    svg.addEventListener('pointerdown', e => { svg.setPointerCapture(e.pointerId); pts.set(e.pointerId, { x: e.clientX, y: e.clientY }); moved = 0; last = { x: e.clientX, y: e.clientY }; if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch = Math.hypot(a.x - b.x, a.y - b.y); } });
+    hintEl = document.createElement('div'); hintEl.className = 'maphint'; hintEl.setAttribute('role', 'status');
+    svg.parentNode.appendChild(hintEl);
+    svg.addEventListener('wheel', e => {
+      const full = document.fullscreenElement && document.fullscreenElement.contains(svg);
+      if (!(e.ctrlKey || e.metaKey || full)) { hint('wheel'); return; }
+      e.preventDefault(); begin();
+      zoomAt(Math.exp(-e.deltaY * (e.deltaMode ? 0.05 : 0.0025)), e.clientX, e.clientY, true);
+      clearTimeout(settle); settle = setTimeout(end, 200);
+    }, { passive: false });
+    svg.addEventListener('pointerdown', e => {
+      if (e.pointerType !== 'touch') { svg.setPointerCapture(e.pointerId); begin(); }
+      pts.set(e.pointerId, { x: e.clientX, y: e.clientY }); moved = pts.size > 1 ? 99 : 0; last = { x: e.clientX, y: e.clientY };
+    });
     svg.addEventListener('pointermove', e => {
       if (!pts.has(e.pointerId) || !vb) return;
-      pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
-      if (pts.size === 2 && pinch) { const [a, b] = [...pts.values()]; const d = Math.hypot(a.x - b.x, a.y - b.y); zoomAt(d / pinch, (a.x + b.x) / 2, (a.y + b.y) / 2); pinch = d; moved += 10; return; }
-      const r = svg.getBoundingClientRect(); const dx = e.clientX - last.x, dy = e.clientY - last.y; moved += Math.abs(dx) + Math.abs(dy);
+      const dx = e.clientX - last.x, dy = e.clientY - last.y; moved += Math.abs(dx) + Math.abs(dy);
+      last = { x: e.clientX, y: e.clientY }; pts.set(e.pointerId, last);
+      if (e.pointerType === 'touch') return;      // one finger scrolls the page; two are read from touch events
       if (moved > 4) svg.classList.add('drag');
-      vb.x -= dx / r.width * vb.w; vb.y -= dy / r.height * vb.h; last = { x: e.clientX, y: e.clientY }; setVB();
+      const r = rect || measure();
+      vb.x -= dx / r.width * vb.w; vb.y -= dy / r.height * vb.h; draw();
     });
     function up(e) {
       if (pts.size === 1 && moved <= 4 && e.type === 'pointerup') {
         const t = document.elementFromPoint(e.clientX, e.clientY);
         if (t && t.dataset && t.dataset.i != null) { state.sel = +t.dataset.i; paint(); onPick(D.fields[state.sel]); }
       }
-      pts.delete(e.pointerId); if (pts.size < 2) pinch = null; if (!pts.size) svg.classList.remove('drag');
+      pts.delete(e.pointerId);
+      if (!pts.size) { svg.classList.remove('drag'); if (e.pointerType !== 'touch' && busy) end(); }
     }
     svg.addEventListener('pointerup', up); svg.addEventListener('pointercancel', up);
+    svg.addEventListener('touchstart', e => {
+      if (e.touches.length >= 2) { two = mid(e.touches); one = null; begin(); }
+      else if (e.touches.length === 1) one = { x: e.touches[0].clientX, y: e.touches[0].clientY, told: false };
+    }, { passive: true });
+    svg.addEventListener('touchmove', e => {
+      if (e.touches.length >= 2 && vb) {
+        e.preventDefault();
+        const m = mid(e.touches);
+        if (!two) { two = m; begin(); return; }
+        const r = rect || measure();
+        vb.x -= (m.x - two.x) / r.width * vb.w; vb.y -= (m.y - two.y) / r.height * vb.h;
+        zoomAt(m.d / two.d, m.x, m.y, true); two = m;
+      } else if (one && !two && e.touches.length === 1) {
+        const t = e.touches[0];
+        if (!one.told && Math.hypot(t.clientX - one.x, t.clientY - one.y) > 12) { one.told = true; hint('touch'); }
+      }
+    }, { passive: false });
+    const lift = e => { if (e.touches.length < 2 && two) { two = null; if (busy) end(); } if (!e.touches.length) one = null; };
+    svg.addEventListener('touchend', lift); svg.addEventListener('touchcancel', lift);
     window.addEventListener('resize', () => { if (vb) { vb.h = vb.w / ratio(); setVB(); } });
   }
 

@@ -35,6 +35,7 @@
     document.documentElement.lang = S.lang;
     document.querySelectorAll('[data-t]').forEach(e => { e.textContent = t(e.dataset.t); });
     document.querySelectorAll('[data-t-aria]').forEach(e => e.setAttribute('aria-label', t(e.dataset.tAria)));
+    document.querySelectorAll('[data-t-ph]').forEach(e => e.setAttribute('placeholder', t(e.dataset.tPh)));
     $('brand').innerHTML = `<span class="name">${esc(cfg.title[S.lang])}</span>` + (cfg.subtitle ? `<span class="sub">${esc(cfg.subtitle[S.lang])}</span>` : '');
     // districts: a list on the map, and the same list in the headline's picker
     $('mpick-name').textContent = ui.districts[S.district];

@@ -16,6 +16,8 @@ which have changed since they were first run). The current state was then adopte
 
 Left-out squares (owner's choices) must not have a harvest table, or the district join would count them; the runner
 stops and names them. Holder lookups are not here: they need the cadastral map in the owner's Chrome.
+The drawing steps (square_fields to outlines) run for every season since 2026-11-21 (owner: "apply to 2024 and 2025",
+after the Google photo check data/experiments/google-borders-2026-11-21/NOTE.md); the grass steps stay 2026 only.
 """
 import argparse
 import csv
@@ -76,9 +78,14 @@ def _aside(d, name):
 
 
 def _line_counts(d, y, r):
-    return [f'for q in $(cut -d, -f1 {d}/district-harvest-{y}.csv | grep "^E" | sort -u); do '
-            f'[ -f {d}/$q/lines-{y}/count.npz ] || {{ [ -d {d}/$q/season-{other(y)} ] && [ -d {d}/$q/season-{y} ] && '
-            f'python {T}/lines_first.py count {d} $q {y}; }} || exit 1; done']
+    """Line counts for squares without one: three at a time, then one by one for any a worker left (a failure stops
+    the run). lines_first picks the two seasons and copies a count over the same seasons."""
+    sq = f'$(cut -d, -f1 {d}/district-harvest-{y}.csv | grep "^E" | sort -u)'
+    one = f'[ -f {d}/$q/lines-{y}/count.npz ] || python {T}/lines_first.py count {d} $q {y}'
+    return [f'i=0; for q in {sq}; do echo "$q" >> {d}/.run/lc-$((i % 3)); i=$((i + 1)); done; '
+            f'for k in 0 1 2; do [ -f {d}/.run/lc-$k ] && (for q in $(cat {d}/.run/lc-$k); do {one}; done) '
+            f'> {d}/.run/line-counts-$k.log 2>&1 & done; wait; rm -f {d}/.run/lc-0 {d}/.run/lc-1 {d}/.run/lc-2',
+            f'for q in {sq}; do {one} || exit 1; done']
 
 
 def _line_splits(d, y, r):
@@ -107,14 +114,14 @@ def _steps(plot_joins=False, esil=False):
               f'python {EXP}/small-fields-2026-11-15/absorb.py {d} {y}',
               f'cp {EXP}/small-fields-2026-11-15/joins-{os.path.basename(d)}-{y}-v5.geojson {d}/joins-{y}.geojson']),
           Step('join_v2', None, _swap_back),
-          Step('square_fields', (MAIN,), lambda d, y, r: [_aside(d, f'joins-{y}-j5.geojson'),
+          Step('square_fields', None, lambda d, y, r: [_aside(d, f'joins-{y}-j5.geojson'),
                                                           f'python {T}/square_fields.py {d} {y}']),
-          Step('field_splits', (MAIN,), lambda d, y, r: [f'python {T}/field_splits.py {d} {y}']),
-          Step('line_counts', (MAIN,), _line_counts),
-          Step('evidence_joins', (MAIN,), lambda d, y, r: [_aside(d, f'joins-{y}-j6.geojson'),
+          Step('field_splits', None, lambda d, y, r: [f'python {T}/field_splits.py {d} {y}']),
+          Step('line_counts', None, _line_counts),
+          Step('evidence_joins', None, lambda d, y, r: [_aside(d, f'joins-{y}-j6.geojson'),
                                                            f'python {T}/evidence_joins.py {d} {y}']),
-          Step('line_splits', (MAIN,), _line_splits),
-          Step('outlines', (MAIN,), lambda d, y, r: [f'python {T}/simple_outlines.py {d} {y}']),
+          Step('line_splits', None, _line_splits),
+          Step('outlines', None, lambda d, y, r: [f'python {T}/simple_outlines.py {d} {y}']),
           Step('fallow_both', None, lambda d, y, r: [f'python {T}/fallow_both_years.py {d} {y} {other(y)}'])]
     if esil:
         s.append(Step('fallow_steppe', (MAIN,), lambda d, y, r: [f'python {T}/fallow_steppe.py {d} {y}']))

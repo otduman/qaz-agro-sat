@@ -36,11 +36,33 @@ def test_every_district_recipe_keeps_the_dependency_order():
     assert esil.index('fallow_steppe') < esil.index('grass') and 'fallow_crop' in esil
 
 
-def test_drawing_and_grass_steps_run_for_the_main_season_only():
-    r = rd.RECIPES['sandyktau']
-    years = {s.name: s.years for s in r.district_steps}
-    assert years['line_splits'] == ('2026',) and years['grass_use'] == ('2026',)
-    assert years['join_v1'] is None   # every season
+DRAWING = ('square_fields', 'field_splits', 'line_counts', 'evidence_joins', 'line_splits', 'outlines')
+
+
+def test_drawing_steps_run_for_every_season_and_grass_steps_for_the_main_one():
+    for r in rd.RECIPES.values():
+        years = {s.name: s.years for s in r.district_steps}
+        assert all(years[n] is None for n in DRAWING), r.name
+        assert years['grass'] == ('2026',) and years['grass_use'] == ('2026',)
+        assert years['join_v1'] is None   # every season
+
+
+def test_a_season_finished_before_has_only_the_drawing_steps_left_to_run():
+    d = tmp_district()
+    try:
+        r = rd.RECIPES['tayynsha']
+        for n in ('join_v1', 'duplicates', 'field_joins', 'plot_joins', 'absorb', 'join_v2', 'fallow_both'):
+            rd.mark_done(d, '2025', n)
+        assert tuple(s.name for s in rd.plan(d, r, '2025')) == DRAWING
+    finally:
+        shutil.rmtree(d)
+
+
+def test_line_counts_leave_the_choice_of_seasons_to_lines_first():
+    r = rd.RECIPES['tayynsha']
+    step = next(s for s in r.district_steps if s.name == 'line_counts')
+    cmd = ' '.join(step.commands('data/tayynsha', '2024', r))
+    assert 'lines_first.py count data/tayynsha $q 2024' in cmd and 'season-' not in cmd, cmd
 
 
 def test_squares_to_run_skip_left_out_and_done_square_seasons():

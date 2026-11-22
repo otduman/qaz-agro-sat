@@ -5,6 +5,7 @@ gitignored and goes straight to Vercel.
 
 Run from the repository root:  python site/build/build.py [--no-images]
 --no-images keeps the pictures already in site/dist/img (they take a minute to make)."""
+import csv
 import datetime
 import json
 import math
@@ -158,6 +159,14 @@ def curves(district_dir, year, ids_by_square):
     return out
 
 
+def rain_days(district_dir, year):
+    """[[date, mm]] of daily district rain for the season (rain.py: ERA5-Land, 15 Jul - 31 Oct), or [] without a file."""
+    p = os.path.join(district_dir, f'rain-{year}.csv')
+    if not os.path.isfile(p):
+        return []
+    return [[r['date'], float(r['mm'])] for r in csv.DictReader(open(p, encoding='utf-8'))]
+
+
 def pace_inside(d):
     """Harvest pace over grain fields whose centre is inside the district outline (proposed 2026-11-20 with the edge squares: the survey squares
     reach far past the border, and the official pace is the district's)."""
@@ -266,6 +275,7 @@ def main():
                 imagery_main = d['imagery']
             d['crop_ha_inside'] = crops_inside(d)
             d['pace'] = pace_inside(d)
+            d['rain'] = rain_days(dist['data_dir'], year)
             d['land_inside'] = land_inside(d)
             values = tokens(d, dist.get('combines'))
             for lang in cfg['languages']:

@@ -1,6 +1,8 @@
 """Tests for lines_first.py. Run: python data/tayynsha/tools/test_lines_first.py"""
 import os
+import shutil
 import sys
+import tempfile
 
 import cv2
 import numpy as np
@@ -89,6 +91,41 @@ def test_a_field_is_split_along_a_line_crossing_it_when_both_parts_reach_the_sit
     assert len(np.unique(out[out > 0])) == 1 and splits == []
     out, splits = LF.split_by_lines(lab, [(120, 5, 120, 70)])          # stops inside the field
     assert len(np.unique(out[out > 0])) == 1 and splits == []
+
+
+def seasons_tree(tree):
+    """A district folder with the given square -> season folders."""
+    d = tempfile.mkdtemp()
+    for sq, years in tree.items():
+        for y in years:
+            os.makedirs(f'{d}/{sq}/season-{y}')
+    return d
+
+
+def test_the_line_count_reads_the_season_before_or_else_the_season_after():
+    d = seasons_tree({'A': (2024, 2025, 2026), 'B': (2025, 2026), 'C': (2025,)})
+    try:
+        assert LF.count_seasons(d, 'A', 2026) == (2025, 2026)
+        assert LF.count_seasons(d, 'A', 2025) == (2024, 2025)
+        assert LF.count_seasons(d, 'A', 2024) == (2024, 2025)
+        assert LF.count_seasons(d, 'B', 2025) == (2025, 2026)
+        assert LF.count_seasons(d, 'C', 2025) is None
+        assert LF.save_count(d, 'C', 2025) == 'no seasons' and not os.path.exists(LF.count_path(d, 'C', 2025))
+    finally:
+        shutil.rmtree(d)
+
+
+def test_a_count_over_the_same_two_seasons_is_copied_not_recounted():
+    d = seasons_tree({'B': (2025, 2026)})
+    try:
+        c = np.arange(12, dtype=np.uint8).reshape(3, 4)
+        os.makedirs(os.path.dirname(LF.count_path(d, 'B', 2026)))
+        np.savez_compressed(LF.count_path(d, 'B', 2026), count=c)
+        assert LF.save_count(d, 'B', 2025) == 'copied from 2026'
+        assert (LF.load_count(d, 'B', 2025) == c).all()
+        assert LF.save_count(d, 'B', 2025) == 'exists'
+    finally:
+        shutil.rmtree(d)
 
 
 if __name__ == '__main__':

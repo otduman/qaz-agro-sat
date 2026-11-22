@@ -14,6 +14,7 @@ python lines_first.py DISTRICT SQUARE YEAR OUT_DIR     (land = the fields the si
 """
 import math
 import os
+import shutil
 import sys
 
 import cv2
@@ -408,17 +409,36 @@ def count_path(district_dir, sq, year):
     return f'{district_dir}/{sq}/lines-{year}/count.npz'
 
 
+def count_seasons(district_dir, sq, year):
+    """The two seasons a square's line count for YEAR reads: the season before and the season itself, or, with no
+    season before (Tayynsha and Esil 2024, Sandyktau 2025), the season itself and the one after; None with one season."""
+    have = lambda y: os.path.isdir(f'{district_dir}/{sq}/season-{y}')
+    for pair in ((year - 1, year), (year, year + 1)):
+        if all(have(y) for y in pair):
+            return pair
+    return None
+
+
 def save_count(district_dir, sq, year, reuse=None):
-    """The square's line count over seasons year-1 and year, kept as <sq>/lines-YEAR/count.npz (uint8). reuse: an
-    existing count raster (.npy) made by the same method, copied instead of recounted."""
+    """The square's line count over count_seasons, kept as <sq>/lines-YEAR/count.npz (uint8). A count of another year
+    over the same two seasons is copied (same seasons, same count). reuse: an existing count raster (.npy) made by the
+    same method, copied instead of recounted."""
     p = count_path(district_dir, sq, year)
     if os.path.isfile(p):
         return 'exists'
+    pair = count_seasons(district_dir, sq, year)
+    if pair is None:
+        return 'no seasons'
+    twin = next((y for y in pair if y != year and count_seasons(district_dir, sq, y) == pair
+                 and os.path.isfile(count_path(district_dir, sq, y))), None)
     os.makedirs(os.path.dirname(p), exist_ok=True)
+    if twin is not None:
+        shutil.copyfile(count_path(district_dir, sq, twin), p)
+        return f'copied from {twin}'
     if reuse and os.path.isfile(reuse):
         count = np.load(reuse)
     else:
-        count, _ = line_count(sq, (year - 1, year))
+        count, _ = line_count(sq, pair)
     np.savez_compressed(p, count=np.clip(count, 0, 255).astype(np.uint8))
     return 'made'
 

@@ -395,7 +395,7 @@ def test_tayynsha_build_privacy():
         return
     d = district_data.build('data/tayynsha', '2026', 'data/tayynsha/holders.csv', 'data/tayynsha/company-groups.csv',
                             'docs/districts/tayynsha.geojson', (69.764, 53.848), 701)
-    assert len(d["fields"]) == 4037, len(d["fields"])  # E640N5960 dropped 2026-11-20 (owner: tidy only, 5% inside); crop seen v3 2026-11-20: a no-crop field found sown (+2 pieces); edge squares 2026-11-20: 13 more squares (47), fields beyond the border shown as on the other rectangles; lines first 2026-11-19: 415 fields split along seen lines into 934 pieces, 90 small fields (20-50 ha) kept, simple outlines; 23 fields split along inner corners (2026-11-18), under 50 ha and no-crop fields left off, gaps filled, tails trimmed, small fields joined, hybrid outlines, straight borders, holders via shared borders, readability joins, duplicates dropped, joins v3, islands folded
+    assert len(d["fields"]) == 3971, len(d["fields"])  # seam overlaps 2026-11-22: 3 copies of one field from two squares merged; piece joins J v1 2026-11-22: 98 pieces of one field with no seen line between them joined (blind check on Google photos 16/18); owner lookups 2026-11-21: 131 more fields with a named company, joins across now-known different holders undone (+35); E640N5960 dropped 2026-11-20 (owner: tidy only, 5% inside); crop seen v3 2026-11-20: a no-crop field found sown (+2 pieces); edge squares 2026-11-20: 13 more squares (47), fields beyond the border shown as on the other rectangles; lines first 2026-11-19: 415 fields split along seen lines into 934 pieces, 90 small fields (20-50 ha) kept, simple outlines; 23 fields split along inner corners (2026-11-18), under 50 ha and no-crop fields left off, gaps filled, tails trimmed, small fields joined, hybrid outlines, straight borders, holders via shared borders, readability joins, duplicates dropped, joins v3, islands folded
     assert all(f['h'] is None for f in d['fields'] if f['k'] in ('farm', 'private', 'lease', 'college'))
     assert d['totals']['group_ha'] > 0
     # 'known holder' leaves out land whose holder the map hides: group share as published (about 42%)
@@ -403,7 +403,7 @@ def test_tayynsha_build_privacy():
     assert t['known_ha'] < t['linked_ha'] and 0.40 < t['group_ha'] / t['known_ha'] < 0.44, t
     assert d['accounts'][0]['ha'] >= d['accounts'][-1]['ha']
     # company hectares come only from the fields shown (no left-off small or no-crop fields)
-    assert 400000 < sum(a["ha"] for a in d["accounts"]) < 405000, sum(a["ha"] for a in d["accounts"])   # 406,928 with them; 403,415 after the edge squares (fields at the old edge re-cut)
+    assert 430000 < sum(a["ha"] for a in d["accounts"]) < 436000, sum(a["ha"] for a in d["accounts"])   # 406,928 with them; 403,415 after the edge squares (fields at the old edge re-cut); 433,058 after the owner lookups of 2026-11-21
     assert all('_k' not in f for f in d['fields'])
     assert set(d['sizes']) <= {'group', 'company', 'farm', 'unread'}
     assert abs(sum(d['crop_ha'].values()) - d['totals']['ha']) < 50

@@ -45,7 +45,9 @@
     "imagery_credit": "Image: Copernicus Sentinel-2, July 2026",
     "loading": "Loading…",
     "plot_line": "Company plot from the cadastre",
-    "fullscreen": "Full screen"
+    "fullscreen": "Full screen",
+    "two_fingers": "Use two fingers to move the map",
+    "ctrl_zoom": "Hold {key} and scroll to zoom the map"
   },
   "panel": {
     "crop": "Crop",
@@ -136,6 +138,7 @@
     "rev": "Revenue 2025, bn ₸ (estimate)",
     "staff": "Staff",
     "search": "Find a company",
+    "search_ph": "Company name",
     "none": "Nothing found"
   },
   "charts": {
@@ -160,6 +163,8 @@
     "pace_other": "Others",
     "pace_unknown": "No cut date found",
     "rain": "rain",
+    "rain_daily": "Daily rain, mm (ERA5-Land, district mean)",
+    "rain_mm": "mm",
     "pace_official": "official",
     "companies_note_plain": "Area inside the surveyed squares, thousand ha.",
     "land_title": "Land inside the district, from the images",

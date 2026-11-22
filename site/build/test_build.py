@@ -254,6 +254,15 @@ def test_pace_counts_only_grain_fields_whose_centre_is_in_the_district():
     assert dict(build.pace_inside(d)['group'])['2026-08-20'] == 1.0
 
 
+def test_rain_days_reads_the_seasons_daily_rain_or_gives_nothing():
+    import tempfile
+    d = tempfile.mkdtemp()
+    with open(os.path.join(d, 'rain-2026.csv'), 'w') as fh:
+        fh.write(''.join(line + chr(10) for line in ('date,mm', '2026-07-15,0.0', '2026-07-16,6.1')))
+    assert build.rain_days(d, '2026') == [['2026-07-15', 0.0], ['2026-07-16', 6.1]]
+    assert build.rain_days(d, '2025') == []
+
+
 def test_field_history_takes_each_other_seasons_class_where_it_covers_most_of_the_field():
     sq = [0, 0, 10, 0, 10, 10, 0, 10]
     part = [0, 0, 4, 0, 4, 10, 0, 10]   # 40% of sq
